@@ -614,11 +614,20 @@ class SearchFlyout:
         results = self._search_fn(query)[:MAX_SEARCH_RESULTS]
 
         if not results:
+            # Locks the row to the same width real result rows use (see
+            # _build_result_row) — without this, the window has nothing to
+            # size itself against until the first real row appears, so it
+            # renders narrower than the width _open_flyout already used to
+            # position it (right vs. left of the parent menu), making the
+            # flyout look misplaced until you actually type a match.
             placeholder = "Type to search a champion" if not query.strip() else "No matches"
+            row = tk.Frame(self._results_body, bg=BG_COLOR, height=ROW_HEIGHT, width=self.WIDTH - 8)
+            row.pack(fill="x", padx=4, pady=1)
+            row.pack_propagate(False)
             tk.Label(
-                self._results_body, text=placeholder, bg=BG_COLOR, fg=DIM_TEXT_COLOR,
+                row, text=placeholder, bg=BG_COLOR, fg=DIM_TEXT_COLOR,
                 font=("Segoe UI", 9), anchor="w",
-            ).pack(fill="x", padx=8, pady=8)
+            ).pack(fill="both", expand=True, padx=(4, 0))
             return
 
         for name in results:
