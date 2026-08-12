@@ -44,11 +44,19 @@ FADE_INTERVAL_MS = 15
 _icon_photos: dict[str, ImageTk.PhotoImage] | None = None
 
 
-def _icon_photo_for(label: str) -> ImageTk.PhotoImage | None:
+def _icon_photo_for(label: str, master: tk.Misc) -> ImageTk.PhotoImage | None:
+    # A PhotoImage is created against a specific Tcl interpreter (whichever
+    # one `master` belongs to). This app runs the popup menu's Tk root on
+    # its own dedicated thread, separate from each short-lived dialog's own
+    # Tk() root — without an explicit `master`, PhotoImage falls back to
+    # tkinter's *global* (not thread-local) "default root" bookkeeping,
+    # which can silently point at the wrong interpreter and make the image
+    # unusable ("image ... doesn't exist") wherever it's actually displayed.
     global _icon_photos
     if _icon_photos is None:
         _icon_photos = {
-            name: ImageTk.PhotoImage(image) for name, image in tray_icons.build_icons_by_label().items()
+            name: ImageTk.PhotoImage(image, master=master)
+            for name, image in tray_icons.build_icons_by_label().items()
         }
     return _icon_photos.get(label)
 
@@ -56,9 +64,9 @@ def _icon_photo_for(label: str) -> ImageTk.PhotoImage | None:
 _toggle_photos: dict[bool, ImageTk.PhotoImage] = {}
 
 
-def _toggle_photo_for(on: bool) -> ImageTk.PhotoImage:
+def _toggle_photo_for(on: bool, master: tk.Misc) -> ImageTk.PhotoImage:
     if on not in _toggle_photos:
-        _toggle_photos[on] = ImageTk.PhotoImage(tray_icons.toggle_switch(on))
+        _toggle_photos[on] = ImageTk.PhotoImage(tray_icons.toggle_switch(on), master=master)
     return _toggle_photos[on]
 
 
@@ -94,6 +102,7 @@ class PopupMenu:
         self._pystray_icon = pystray_icon
         self._chain = chain if chain is not None else []
         self._flyout: PopupMenu | None = None
+        self._flyout_item: pystray.MenuItem | None = None
         self._flyout_after_id: str | None = None
         self._avatar_image = None  # keep references so tkinter doesn't garbage-collect them
         self._row_images: list[ImageTk.PhotoImage] = []
@@ -160,7 +169,7 @@ class PopupMenu:
         row.pack(fill="x", padx=4, pady=(6, 2))
 
         image = Image.open(avatar_path).convert("RGBA").resize((28, 28), Image.LANCZOS)
-        self._avatar_image = ImageTk.PhotoImage(image)
+        self._avatar_image = ImageTk.PhotoImage(image, master=self.window)
         avatar_label = tk.Label(row, image=self._avatar_image, bg=BG_COLOR)
         avatar_label.pack(side="left", padx=(6, 8), pady=4)
 
@@ -212,7 +221,7 @@ class PopupMenu:
         icon_slot.pack(side="left")
         icon_slot.pack_propagate(False)
         icon_label = None
-        icon_photo = _icon_photo_for(raw_text)
+        icon_photo = _icon_photo_for(raw_text, self.window)
         if icon_photo is not None:
             self._row_images.append(icon_photo)
             icon_label = tk.Label(icon_slot, image=icon_photo, bg=BG_COLOR)
@@ -228,7 +237,7 @@ class PopupMenu:
             arrow = tk.Label(row, text="▸", bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
             arrow.pack(side="right", padx=(0, ROW_PAD_X))
         elif is_toggle:
-            toggle_photo = _toggle_photo_for(bool(item.checked))
+            toggle_photo = _toggle_photo_for(bool(item.checked), self.window)
             self._row_images.append(toggle_photo)
             toggle_label = tk.Label(row, image=toggle_photo, bg=BG_COLOR)
             toggle_label.pack(side="right", padx=(0, ROW_PAD_X))
@@ -273,6 +282,17 @@ class PopupMenu:
             w.bind("<Button-1>", on_click)
 
     def _schedule_flyout(self, item: pystray.MenuItem, row: tk.Frame) -> None:
+        # Moving the mouse within a single row (row Frame -> icon -> label
+        # -> ...) fires repeated <Enter>/<Leave> pairs for the *same* item
+        # as the cursor crosses sibling-widget boundaries — without this
+        # check, each one would re-arm the timer and, once it fired,
+        # _open_flyout would destroy and recreate an already-open flyout
+        # for no reason, which looked like flickering (fade-in replaying).
+        if self._flyout is not None and self._flyout_item is item:
+            if self._flyout_after_id is not None:
+                self.window.after_cancel(self._flyout_after_id)
+                self._flyout_after_id = None
+            return
         self._cancel_flyout(keep_pending=True)
         self._flyout_after_id = self.window.after(
             FLYOUT_DELAY_MS, lambda: self._open_flyout(item, row)
@@ -285,11 +305,15 @@ class PopupMenu:
         if not keep_pending and self._flyout is not None:
             self._flyout.window.destroy()
             self._flyout = None
+            self._flyout_item = None
 
     def _open_flyout(self, item: pystray.MenuItem, row: tk.Frame) -> None:
         if self._flyout is not None:
+            if self._flyout_item is item:
+                return  # already open for this exact item — nothing to do
             self._flyout.window.destroy()
             self._flyout = None
+            self._flyout_item = None
 
         row.update_idletasks()
         screen_w = self.window.winfo_screenwidth()
@@ -305,6 +329,7 @@ class PopupMenu:
             chain=self._chain,
             width=SUBMENU_WIDTH,
         )
+        self._flyout_item = item
 
     def _on_focus_out(self, _event: object) -> None:
         self.window.after(60, self._check_focus_after_out)

@@ -438,7 +438,7 @@ def _ask_riot_id(root: tk.Tk) -> tuple[str, str] | None:
 
     header = tk.Frame(body, bg=BG_COLOR)
     header.pack(fill="x", pady=(0, 14))
-    icon_photo = ImageTk.PhotoImage(tray_icons.riot_id_icon(24))
+    icon_photo = ImageTk.PhotoImage(tray_icons.riot_id_icon(24), master=dialog)
     tk.Label(header, image=icon_photo, bg=BG_COLOR).pack(side="left", padx=(0, 10))
     tk.Label(
         header, text="Change Riot ID", bg=BG_COLOR, fg=GOLD, font=("Segoe UI", 11, "bold"),
@@ -679,10 +679,9 @@ def main() -> None:
     stop_event = threading.Event()
 
     menu = pystray.Menu(
-        pystray.MenuItem(connected_text, None, enabled=False),
-        pystray.MenuItem(league_dir_text, None, enabled=False),
-        pystray.Menu.SEPARATOR,
-        # Features: each self-contained (its own enable toggle + settings).
+        # Features first, for quick direct access — info rows about
+        # connection/folder status live further down, between Updates
+        # and Quit.
         pystray.MenuItem(
             "Status Message",
             pystray.Menu(
@@ -757,6 +756,9 @@ def main() -> None:
                 ),
             ),
         ),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(connected_text, None, enabled=False),
+        pystray.MenuItem(league_dir_text, None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", make_quit_handler(stop_event)),
     )
