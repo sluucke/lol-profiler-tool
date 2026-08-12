@@ -1,15 +1,20 @@
-"""Checks GitHub Releases for a newer version and self-updates the frozen .exe.
+"""Checks GitHub Releases for a newer version and self-updates the frozen
+app (a PyInstaller onedir build: LoLProfilerTool.exe + an _internal/ folder
+next to it).
 
-Only works when running as the PyInstaller-built .exe (sys.frozen) — there's
-nothing meaningful to "update" when running from source with `python main.py`.
+Only works when running as the compiled app (sys.frozen) — there's nothing
+meaningful to "update" when running from source with `python main.py`.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,7 +22,7 @@ import requests
 
 logger = logging.getLogger("lol-profiler-tool")
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.5.0"
 GITHUB_REPO = "sluucke/lol-profiler-tool"
 
 _RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -42,7 +47,7 @@ class UpdateInfo:
 
 def check_for_update(timeout: float = 5.0) -> UpdateInfo | None:
     """Returns info about the latest GitHub release if it's newer than
-    APP_VERSION and has a .exe asset attached, else None."""
+    APP_VERSION and has a .zip asset attached, else None."""
     try:
         response = requests.get(
             _RELEASES_API, timeout=timeout, headers={"Accept": "application/vnd.github+json"}
@@ -61,76 +66,130 @@ def check_for_update(timeout: float = 5.0) -> UpdateInfo | None:
         return None
 
     asset = next(
-        (a for a in data.get("assets", []) if a.get("name", "").lower().endswith(".exe")), None
+        (a for a in data.get("assets", []) if a.get("name", "").lower().endswith(".zip")), None
     )
     if asset is None:
-        logger.warning("Release %s has no .exe asset attached — skipping.", latest_tag)
+        logger.warning("Release %s has no .zip asset attached — skipping.", latest_tag)
         return None
 
     return UpdateInfo(version=latest_tag, download_url=asset["browser_download_url"], notes=data.get("body") or "")
 
 
+def _build_update_script(
+    *, pid: int, install_dir: Path, staging_dir: Path, backup_dir: Path, exe_path: Path, log_path: Path
+) -> str:
+    """A PowerShell script (not a .bat) run as a separate, detached process:
+    it does the actual file swap and relaunch after this process exits, so
+    it needs real error handling and retry logic, not just a goto loop —
+    swapping a whole folder (onedir) has more that can go wrong than
+    swapping one file ever did."""
+    return f"""
+$ErrorActionPreference = 'Stop'
+try {{
+    # Wait for this app's own process to actually exit before touching
+    # its files.
+    $deadline = (Get-Date).AddSeconds(60)
+    while ((Get-Date) -lt $deadline) {{
+        $proc = Get-Process -Id {pid} -ErrorAction SilentlyContinue
+        if (-not $proc) {{ break }}
+        Start-Sleep -Milliseconds 500
+    }}
+    # A moment for the OS/antivirus to release file handles even after the
+    # process object itself is gone.
+    Start-Sleep -Seconds 2
+
+    $installDir = "{install_dir}"
+    $stagingDir = "{staging_dir}"
+    $backupDir = "{backup_dir}"
+    $exePath = "{exe_path}"
+
+    if (Test-Path $backupDir) {{
+        Remove-Item -Path $backupDir -Recurse -Force -ErrorAction SilentlyContinue
+    }}
+
+    # Move (not delete) the current install aside first — if anything below
+    # fails, the old install is still recoverable rather than gone.
+    $attempts = 0
+    $movedAside = $false
+    while ($attempts -lt 20 -and -not $movedAside) {{
+        try {{
+            Move-Item -Path $installDir -Destination $backupDir -ErrorAction Stop
+            $movedAside = $true
+        }} catch {{
+            $attempts++
+            Start-Sleep -Milliseconds 500
+        }}
+    }}
+    if (-not $movedAside) {{
+        throw "Could not move '$installDir' aside after $attempts attempts (still locked)."
+    }}
+
+    Move-Item -Path $stagingDir -Destination $installDir -Force
+    Start-Process -FilePath $exePath
+    Start-Sleep -Seconds 2
+    Remove-Item -Path $backupDir -Recurse -Force -ErrorAction SilentlyContinue
+}} catch {{
+    "$(Get-Date -Format o) UPDATE FAILED: $_" | Out-File -FilePath "{log_path}" -Append -Encoding utf8
+}} finally {{
+    Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+}}
+"""
+
+
 def download_and_apply_update(info: UpdateInfo) -> None:
-    """Downloads the new .exe and spawns a detached helper script that waits
-    for this process to release the file lock on its own .exe, replaces it,
-    and relaunches it. Caller must exit the process right after this returns
-    (e.g. stop the tray icon) so the helper script can complete the swap."""
+    """Downloads and extracts the new release, then spawns a detached
+    PowerShell script that waits for this process to exit, swaps the whole
+    install folder for the new one, and relaunches it. Caller must exit the
+    process right after this returns (e.g. stop the tray icon) so the
+    script can complete the swap."""
     if not getattr(sys, "frozen", False):
-        raise RuntimeError("Auto-update only works in the compiled .exe, not when running via python main.py.")
+        raise RuntimeError("Auto-update only works in the compiled app, not when running via python main.py.")
 
     current_exe = Path(sys.executable).resolve()
+    install_dir = current_exe.parent
     tmp_dir = Path(tempfile.gettempdir())
-    downloaded = tmp_dir / "LoLProfilerTool_update.exe"
+
+    downloaded_zip = tmp_dir / "LoLProfilerTool_update.zip"
+    staging_dir = tmp_dir / "LoLProfilerTool_update_staging"
+    backup_dir = tmp_dir / "LoLProfilerTool_update_backup"
+    log_path = tmp_dir / "LoLProfilerTool_update_log.txt"
+    script_path = tmp_dir / "LoLProfilerTool_apply_update.ps1"
 
     with requests.get(info.download_url, stream=True, timeout=60) as response:
         response.raise_for_status()
-        with open(downloaded, "wb") as f:
+        with open(downloaded_zip, "wb") as f:
             for chunk in response.iter_content(chunk_size=1 << 16):
                 f.write(chunk)
 
-    # `move` fails while current_exe is still locked by this running process;
-    # retry for up to a minute rather than tracking the PID directly.
-    #
-    # A freshly-written, unsigned .exe is a common Windows Defender real-time
-    # scan target (it looks like a self-replacing binary, a classic malware
-    # pattern), and launching it immediately after the move can race that
-    # scan and fail to load. So: wait a couple seconds after the move
-    # succeeds before the first launch attempt, and retry the launch itself
-    # a few times (checking via tasklist) in case the first attempt loses
-    # that race — this needs no user interaction to recover.
-    exe_name = current_exe.name
-    script = tmp_dir / "LoLProfilerTool_apply_update.bat"
-    script.write_text(
-        "@echo off\r\n"
-        "set count=0\r\n"
-        ":retry_move\r\n"
-        f'move /y "{downloaded}" "{current_exe}" >nul 2>&1\r\n'
-        "if not errorlevel 1 goto settle\r\n"
-        "set /a count+=1\r\n"
-        "if %count% GEQ 60 goto giveup\r\n"
-        "timeout /t 1 /nobreak >nul\r\n"
-        "goto retry_move\r\n"
-        "\r\n"
-        ":settle\r\n"
-        "timeout /t 2 /nobreak >nul\r\n"
-        "set tries=0\r\n"
-        ":try_launch\r\n"
-        f'start "" "{current_exe}"\r\n'
-        "timeout /t 3 /nobreak >nul\r\n"
-        f'tasklist /fi "imagename eq {exe_name}" 2>nul | find /i "{exe_name}" >nul\r\n'
-        "if not errorlevel 1 goto giveup\r\n"
-        "set /a tries+=1\r\n"
-        "if %tries% GEQ 3 goto giveup\r\n"
-        "goto try_launch\r\n"
-        "\r\n"
-        ":giveup\r\n"
-        'del "%~f0"\r\n',
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir, ignore_errors=True)
+    with zipfile.ZipFile(downloaded_zip) as zf:
+        zf.extractall(staging_dir)
+    downloaded_zip.unlink(missing_ok=True)
+
+    if not (staging_dir / current_exe.name).exists():
+        raise RuntimeError(
+            f"Downloaded release doesn't contain {current_exe.name} at its root — refusing to apply it."
+        )
+
+    script_path.write_text(
+        _build_update_script(
+            pid=os.getpid(),
+            install_dir=install_dir,
+            staging_dir=staging_dir,
+            backup_dir=backup_dir,
+            exe_path=current_exe,
+            log_path=log_path,
+        ),
         encoding="utf-8",
     )
 
     subprocess.Popen(
-        ["cmd", "/c", str(script)],
+        [
+            "powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-WindowStyle", "Hidden", "-File", str(script_path),
+        ],
         creationflags=subprocess.CREATE_NO_WINDOW,
         close_fds=True,
     )
-    logger.info("Update %s downloaded; restarting to apply it.", info.version)
+    logger.info("Update %s downloaded and staged; restarting to apply it.", info.version)

@@ -79,15 +79,25 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
-## Building the `.exe`
+## Building the app
 
 ```bash
 pip install pyinstaller
 pyinstaller --noconfirm LoLProfilerTool.spec
 ```
 
-The executable is produced at `dist/LoLProfilerTool.exe` — a single file
-with no external dependencies.
+This is a **onedir** build: the output is a folder,
+`dist/LoLProfilerTool/`, containing `LoLProfilerTool.exe` and an
+`_internal/` folder next to it — both are required, unlike a onefile
+build. (Onedir was chosen over onefile specifically to avoid onefile's
+runtime self-extraction step, which was an intermittent source of
+"Failed to load Python DLL" crashes — antivirus real-time scanning
+tends to race a freshly-extracted, unsigned DLL bundle. Onedir's files
+sit on disk permanently, so there's no repeated extraction to race.)
+
+To hand the app to someone else, zip the whole `dist/LoLProfilerTool/`
+folder — that zip is also exactly what gets attached to a GitHub release
+(see below), since the self-updater downloads and extracts it the same way.
 
 ## Credits
 
@@ -98,8 +108,19 @@ The tray menu's icons are from [Twemoji](https://github.com/twitter/twemoji)
 
 1. Bump the version in `pyproject.toml` and `APP_VERSION` (`updater.py`) to
    match the tag you're about to create (e.g. `1.1.0` → tag `v1.1.0`).
-2. Build the `.exe` (command above).
-3. Create a tag and a GitHub release with that tag, attaching the generated
-   `LoLProfilerTool.exe` as an asset.
-4. Anyone running an older version gets notified automatically and can
-   install the update with one click from the tray menu.
+2. Build the app (command above).
+3. Zip the build output's *contents* (not the folder itself — the exe
+   should be at the zip's root) into `LoLProfilerTool.zip`:
+
+   ```bash
+   cd dist/LoLProfilerTool && 7z a -tzip ../../LoLProfilerTool.zip . && cd ../..
+   ```
+
+   (or right-click → "Compress to ZIP file" on the *contents* of
+   `dist/LoLProfilerTool/`, not the folder itself, using File Explorer)
+4. Create a tag and a GitHub release with that tag, attaching
+   `LoLProfilerTool.zip` as an asset.
+5. Anyone running an older version gets notified automatically and can
+   install the update with one click from the tray menu — the updater
+   downloads that same zip, extracts it, and swaps it in for the running
+   install.
