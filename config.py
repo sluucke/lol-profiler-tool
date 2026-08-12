@@ -86,3 +86,13 @@ def set_auto_lobby_reveal_enabled(enabled: bool) -> None:
     data = _load()
     data["auto_lobby_reveal_enabled"] = enabled
     _save(data)
+
+
+def get_auto_update_enabled() -> bool:
+    return bool(_load().get("auto_update_enabled", False))
+
+
+def set_auto_update_enabled(enabled: bool) -> None:
+    data = _load()
+    data["auto_update_enabled"] = enabled
+    _save(data)

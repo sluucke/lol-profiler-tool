@@ -30,7 +30,9 @@ chat, a lobby reveal shortcut, and self-update via GitHub Releases.
   connection, message/rank updates, errors) to `logs.txt`, timestamped.
 - **Start with Windows** — toggle autostart from the tray menu.
 - **Self-update** — automatically checks for new GitHub releases (every
-  hour), and lets you install one with a single click from the menu.
+  hour). Install with a single click from the menu, or enable **Auto Update**
+  to have new versions downloaded and installed automatically as soon as
+  they're detected.
 
 ## How it works
 

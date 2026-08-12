@@ -353,14 +353,28 @@ def _auto_reveal_worker(icon: pystray.Icon) -> None:
         logger.warning("Auto Lobby Reveal failed: %s", exc)
 
 
-def check_for_update_now(icon: pystray.Icon, *, notify_if_none: bool = False) -> None:
+def toggle_auto_update(icon, item) -> None:
+    enabled = not config.get_auto_update_enabled()
+    config.set_auto_update_enabled(enabled)
+    logger.info("Auto Update %s.", "enabled" if enabled else "disabled")
+    icon.update_menu()
+
+
+def auto_update_checked(item) -> bool:
+    return config.get_auto_update_enabled()
+
+
+def check_for_update_now(icon: pystray.Icon, stop_event: threading.Event, *, notify_if_none: bool = False) -> None:
     """Runs synchronously — callers dispatch it onto a worker thread."""
     global _pending_update
     info = updater.check_for_update()
     _pending_update = info
     if info is not None:
         logger.info("Update available: %s", info.version)
-        icon.notify(f"Update available: {info.version}. See the menu to install it.", "LoL Profiler Tool")
+        if config.get_auto_update_enabled():
+            _apply_update(icon, stop_event, info)
+        else:
+            icon.notify(f"Update available: {info.version}. See the menu to install it.", "LoL Profiler Tool")
     elif notify_if_none:
         icon.notify("You're already on the latest version.", "LoL Profiler Tool")
     icon.update_menu()
@@ -371,12 +385,17 @@ def update_check_loop(stop_event: threading.Event, icon: pystray.Icon) -> None:
     if not getattr(sys, "frozen", False):
         return
     while not stop_event.is_set():
-        check_for_update_now(icon)
+        check_for_update_now(icon, stop_event)
         stop_event.wait(UPDATE_CHECK_INTERVAL_SECONDS)
 
 
-def check_for_update_menu(icon, item) -> None:
-    threading.Thread(target=check_for_update_now, args=(icon,), kwargs={"notify_if_none": True}, daemon=True).start()
+def make_check_for_update_menu(stop_event: threading.Event):
+    def handler(icon, item) -> None:
+        threading.Thread(
+            target=check_for_update_now, args=(icon, stop_event), kwargs={"notify_if_none": True}, daemon=True
+        ).start()
+
+    return handler
 
 
 def update_available_text(item) -> str:
@@ -389,16 +408,14 @@ def update_available_visible(item) -> bool:
 
 def make_apply_update_handler(stop_event: threading.Event):
     def apply_update(icon, item) -> None:
-        threading.Thread(target=_apply_update_worker, args=(icon, stop_event), daemon=True).start()
+        if _pending_update is None:
+            return
+        threading.Thread(target=_apply_update, args=(icon, stop_event, _pending_update), daemon=True).start()
 
     return apply_update
 
 
-def _apply_update_worker(icon: pystray.Icon, stop_event: threading.Event) -> None:
-    global _pending_update
-    info = _pending_update
-    if info is None:
-        return
+def _apply_update(icon: pystray.Icon, stop_event: threading.Event, info: updater.UpdateInfo) -> None:
     try:
         icon.notify(f"Downloading update {info.version}...", "LoL Profiler Tool")
         updater.download_and_apply_update(info)
@@ -506,7 +523,9 @@ def main() -> None:
         pystray.MenuItem(
             "Updates",
             pystray.Menu(
-                pystray.MenuItem("Check for updates", check_for_update_menu),
+                pystray.MenuItem("Auto Update", toggle_auto_update, checked=auto_update_checked),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Check for updates", make_check_for_update_menu(stop_event)),
                 pystray.MenuItem(
                     update_available_text, make_apply_update_handler(stop_event), visible=update_available_visible
                 ),

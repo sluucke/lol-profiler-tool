@@ -17,7 +17,7 @@ import requests
 
 logger = logging.getLogger("lol-profiler-tool")
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 GITHUB_REPO = "sluucke/lol-profiler-tool"
 
 _RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
