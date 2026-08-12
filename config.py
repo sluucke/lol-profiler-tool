@@ -106,3 +106,13 @@ def set_auto_accept_enabled(enabled: bool) -> None:
     data = _load()
     data["auto_accept_enabled"] = enabled
     _save(data)
+
+
+def get_last_seen_version() -> str | None:
+    return _load().get("last_seen_version")
+
+
+def set_last_seen_version(version: str) -> None:
+    data = _load()
+    data["last_seen_version"] = version
+    _save(data)

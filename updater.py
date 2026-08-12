@@ -17,7 +17,7 @@ import requests
 
 logger = logging.getLogger("lol-profiler-tool")
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 GITHUB_REPO = "sluucke/lol-profiler-tool"
 
 _RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -90,19 +90,39 @@ def download_and_apply_update(info: UpdateInfo) -> None:
 
     # `move` fails while current_exe is still locked by this running process;
     # retry for up to a minute rather than tracking the PID directly.
+    #
+    # A freshly-written, unsigned .exe is a common Windows Defender real-time
+    # scan target (it looks like a self-replacing binary, a classic malware
+    # pattern), and launching it immediately after the move can race that
+    # scan and fail to load. So: wait a couple seconds after the move
+    # succeeds before the first launch attempt, and retry the launch itself
+    # a few times (checking via tasklist) in case the first attempt loses
+    # that race — this needs no user interaction to recover.
+    exe_name = current_exe.name
     script = tmp_dir / "LoLProfilerTool_apply_update.bat"
     script.write_text(
         "@echo off\r\n"
         "set count=0\r\n"
-        ":retry\r\n"
+        ":retry_move\r\n"
         f'move /y "{downloaded}" "{current_exe}" >nul 2>&1\r\n'
-        "if not errorlevel 1 goto done\r\n"
+        "if not errorlevel 1 goto settle\r\n"
         "set /a count+=1\r\n"
         "if %count% GEQ 60 goto giveup\r\n"
         "timeout /t 1 /nobreak >nul\r\n"
-        "goto retry\r\n"
-        ":done\r\n"
+        "goto retry_move\r\n"
+        "\r\n"
+        ":settle\r\n"
+        "timeout /t 2 /nobreak >nul\r\n"
+        "set tries=0\r\n"
+        ":try_launch\r\n"
         f'start "" "{current_exe}"\r\n'
+        "timeout /t 3 /nobreak >nul\r\n"
+        f'tasklist /fi "imagename eq {exe_name}" 2>nul | find /i "{exe_name}" >nul\r\n'
+        "if not errorlevel 1 goto giveup\r\n"
+        "set /a tries+=1\r\n"
+        "if %tries% GEQ 3 goto giveup\r\n"
+        "goto try_launch\r\n"
+        "\r\n"
         ":giveup\r\n"
         'del "%~f0"\r\n',
         encoding="utf-8",
@@ -110,7 +130,7 @@ def download_and_apply_update(info: UpdateInfo) -> None:
 
     subprocess.Popen(
         ["cmd", "/c", str(script)],
-        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+        creationflags=subprocess.CREATE_NO_WINDOW,
         close_fds=True,
     )
     logger.info("Update %s downloaded; restarting to apply it.", info.version)

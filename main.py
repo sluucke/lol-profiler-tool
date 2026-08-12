@@ -6,7 +6,7 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
 
 import pystray
 from PIL import Image, ImageDraw
@@ -403,21 +403,63 @@ def change_riot_id_menu(icon, item) -> None:
     threading.Thread(target=_change_riot_id_worker, args=(icon,), daemon=True).start()
 
 
+def _ask_riot_id(root: tk.Tk) -> tuple[str, str] | None:
+    """A single form with both the name and tag fields, instead of two
+    sequential prompts."""
+    dialog = tk.Toplevel(root)
+    dialog.title("Change Riot ID")
+    dialog.resizable(False, False)
+    dialog.attributes("-topmost", True)
+
+    tk.Label(dialog, text=f"Riot Name (max {riotid_changer.MAX_NAME_LENGTH} characters):").grid(
+        row=0, column=0, sticky="w", padx=10, pady=(10, 0)
+    )
+    name_entry = tk.Entry(dialog, width=30)
+    name_entry.grid(row=1, column=0, padx=10, pady=(0, 10))
+
+    tk.Label(dialog, text=f"Riot Tag (max {riotid_changer.MAX_TAG_LENGTH} characters, without #):").grid(
+        row=2, column=0, sticky="w", padx=10
+    )
+    tag_entry = tk.Entry(dialog, width=30)
+    tag_entry.grid(row=3, column=0, padx=10, pady=(0, 10))
+
+    result: dict[str, str] = {}
+
+    def on_ok() -> None:
+        result["name"] = name_entry.get()
+        result["tag"] = tag_entry.get()
+        dialog.destroy()
+
+    def on_cancel() -> None:
+        dialog.destroy()
+
+    button_frame = tk.Frame(dialog)
+    button_frame.grid(row=4, column=0, pady=(0, 10))
+    tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=5)
+
+    name_entry.focus_set()
+    dialog.bind("<Return>", lambda _event: on_ok())
+    dialog.bind("<Escape>", lambda _event: on_cancel())
+
+    dialog.grab_set()
+    root.wait_window(dialog)
+
+    if "name" not in result:
+        return None
+    return result["name"], result["tag"]
+
+
 def _change_riot_id_worker(icon: pystray.Icon) -> None:
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
-    name = simpledialog.askstring(
-        "Change Riot ID", f"New name (max {riotid_changer.MAX_NAME_LENGTH} characters):", parent=root
-    )
-    if not name:
-        root.destroy()
-        return
-    tag = simpledialog.askstring(
-        "Change Riot ID", f"New tag (max {riotid_changer.MAX_TAG_LENGTH} characters, without #):", parent=root
-    )
+    answer = _ask_riot_id(root)
     root.destroy()
-    if not tag:
+    if answer is None:
+        return
+    name, tag = answer
+    if not name or not tag:
         return
 
     creds = read_credentials()
@@ -431,6 +473,18 @@ def _change_riot_id_worker(icon: pystray.Icon) -> None:
     except (ValueError, LCUError) as exc:
         logger.warning("Riot ID change failed: %s", exc)
         icon.notify(f"Riot ID change failed: {exc}", "LoL Profiler Tool")
+
+
+def announce_update_if_applicable(icon: pystray.Icon) -> None:
+    """Notifies once when this run's version differs from the last one we
+    recorded — the only reliable way to confirm an update actually applied,
+    since the process that triggers a restart exits before it could know
+    whether the relaunch succeeded."""
+    last_seen = config.get_last_seen_version()
+    if last_seen is not None and last_seen != updater.APP_VERSION:
+        logger.info("Now running a new version: %s -> %s", last_seen, updater.APP_VERSION)
+        icon.notify(f"Updated to v{updater.APP_VERSION}.", "LoL Profiler Tool")
+    config.set_last_seen_version(updater.APP_VERSION)
 
 
 def toggle_auto_update(icon, item) -> None:
@@ -626,6 +680,7 @@ def main() -> None:
         # Runs in its own thread once the tray backend is ready — only from here on
         # is it safe to call icon.notify()/update_menu() (e.g. from sync_loop).
         icon.visible = True
+        announce_update_if_applicable(icon)
         threading.Thread(target=update_check_loop, args=(stop_event, icon), daemon=True).start()
         threading.Thread(target=auto_accept.auto_accept_loop, args=(stop_event, client), daemon=True).start()
         sync_loop(stop_event, icon)

@@ -42,7 +42,8 @@ chat, a lobby reveal shortcut, and self-update via GitHub Releases.
 - **Self-update** — automatically checks for new GitHub releases (every
   hour). Install with a single click from the menu, or enable **Auto Update**
   to have new versions downloaded and installed automatically as soon as
-  they're detected.
+  they're detected. You'll get a notification confirming the update once the
+  new version starts up.
 
 ## How it works
 
