@@ -26,6 +26,16 @@ chat, a lobby reveal shortcut, and self-update via GitHub Releases.
   ranked stats before the game starts. Trigger it manually from the tray menu,
   or enable **Auto Lobby Reveal** to have it open automatically the moment
   champ select starts.
+- **Auto Accept** — automatically accepts the ready check the instant a
+  match is found. Polls separately from the rest of the app (every 0.5s)
+  since the accept window is short.
+- **Dodge champion select** — leaves champion select on demand (with a
+  confirmation prompt first). **This applies the normal queue-dodge penalty**
+  (LP loss / temporary matchmaking ban), exactly like dodging manually
+  through the client — it is not a way around it.
+- **Change Riot ID** — changes your account's game name/tag from the tray
+  menu. **This uses your account's real rename allowance**, same as changing
+  it from the client's own settings — it is not a cosmetic override.
 - **File logging** — option to record everything (folder detection, client
   connection, message/rank updates, errors) to `logs.txt`, timestamped.
 - **Start with Windows** — toggle autostart from the tray menu.

@@ -6,14 +6,17 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog
+from tkinter import filedialog, messagebox, simpledialog
 
 import pystray
 from PIL import Image, ImageDraw
 
 import autostart
+import auto_accept
 import config
+import dodge as dodge_feature
 import lobby_reveal
+import riotid_changer
 import updater
 from lcu_client import LCUClient, LCUError, read_credentials
 from paths import LOG_FILE, MESSAGE_FILE, resolve_league_dir
@@ -353,6 +356,83 @@ def _auto_reveal_worker(icon: pystray.Icon) -> None:
         logger.warning("Auto Lobby Reveal failed: %s", exc)
 
 
+def toggle_auto_accept(icon, item) -> None:
+    enabled = not config.get_auto_accept_enabled()
+    config.set_auto_accept_enabled(enabled)
+    logger.info("Auto Accept %s.", "enabled" if enabled else "disabled")
+    icon.update_menu()
+
+
+def auto_accept_checked(item) -> bool:
+    return config.get_auto_accept_enabled()
+
+
+def dodge_champ_select(icon, item) -> None:
+    threading.Thread(target=_dodge_worker, args=(icon,), daemon=True).start()
+
+
+def _dodge_worker(icon: pystray.Icon) -> None:
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    confirmed = messagebox.askyesno(
+        "Dodge Champion Select",
+        "Leave champion select now? This applies the normal queue-dodge "
+        "penalty (LP loss / temporary matchmaking ban), same as dodging "
+        "manually.",
+        parent=root,
+    )
+    root.destroy()
+    if not confirmed:
+        return
+
+    creds = read_credentials()
+    if creds is None:
+        icon.notify("LoL client is not open.", "LoL Profiler Tool")
+        return
+    try:
+        dodge_feature.dodge(client, creds)
+        logger.info("Dodge: left champion select.")
+        icon.notify("Left champion select.", "LoL Profiler Tool")
+    except LCUError as exc:
+        logger.warning("Dodge failed: %s", exc)
+        icon.notify(f"Dodge failed: {exc}", "LoL Profiler Tool")
+
+
+def change_riot_id_menu(icon, item) -> None:
+    threading.Thread(target=_change_riot_id_worker, args=(icon,), daemon=True).start()
+
+
+def _change_riot_id_worker(icon: pystray.Icon) -> None:
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    name = simpledialog.askstring(
+        "Change Riot ID", f"New name (max {riotid_changer.MAX_NAME_LENGTH} characters):", parent=root
+    )
+    if not name:
+        root.destroy()
+        return
+    tag = simpledialog.askstring(
+        "Change Riot ID", f"New tag (max {riotid_changer.MAX_TAG_LENGTH} characters, without #):", parent=root
+    )
+    root.destroy()
+    if not tag:
+        return
+
+    creds = read_credentials()
+    if creds is None:
+        icon.notify("LoL client is not open.", "LoL Profiler Tool")
+        return
+    try:
+        new_id = riotid_changer.change_riot_id(client, creds, name, tag)
+        logger.info("Riot ID changed to: %s", new_id)
+        icon.notify(f"Riot ID changed to {new_id}", "LoL Profiler Tool")
+    except (ValueError, LCUError) as exc:
+        logger.warning("Riot ID change failed: %s", exc)
+        icon.notify(f"Riot ID change failed: {exc}", "LoL Profiler Tool")
+
+
 def toggle_auto_update(icon, item) -> None:
     enabled = not config.get_auto_update_enabled()
     config.set_auto_update_enabled(enabled)
@@ -510,6 +590,9 @@ def main() -> None:
                 pystray.MenuItem("Reveal lobby now", reveal_lobby_now),
             ),
         ),
+        pystray.MenuItem("Auto Accept", toggle_auto_accept, checked=auto_accept_checked),
+        pystray.MenuItem("Dodge champion select", dodge_champ_select),
+        pystray.MenuItem("Change Riot ID...", change_riot_id_menu),
         pystray.Menu.SEPARATOR,
         # App-level settings, unrelated to any one feature.
         pystray.MenuItem(
@@ -544,6 +627,7 @@ def main() -> None:
         # is it safe to call icon.notify()/update_menu() (e.g. from sync_loop).
         icon.visible = True
         threading.Thread(target=update_check_loop, args=(stop_event, icon), daemon=True).start()
+        threading.Thread(target=auto_accept.auto_accept_loop, args=(stop_event, client), daemon=True).start()
         sync_loop(stop_event, icon)
 
     icon.run(setup=setup)

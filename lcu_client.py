@@ -118,3 +118,30 @@ class LCUClient:
     def get_region(self, creds: LCUCredentials) -> str:
         response = self._request("GET", creds, "/riotclient/region-locale")
         return response.json().get("webRegion", "")
+
+    def get_matchmaking_search_state(self, creds: LCUCredentials) -> str:
+        """"Searching", "Found", "Error", etc — empty string when not currently
+        in matchmaking (the endpoint 404s in that case)."""
+        try:
+            response = self._request("GET", creds, "/lol-lobby/v2/lobby/matchmaking/search-state")
+        except LCUError:
+            return ""
+        return response.json().get("searchState", "")
+
+    def accept_ready_check(self, creds: LCUCredentials) -> None:
+        self._request("POST", creds, "/lol-matchmaking/v1/ready-check/accept")
+
+    def quit_champ_select(self, creds: LCUCredentials) -> None:
+        """Leaves champion select via the client's own internal LCDS proxy
+        call — this incurs the normal queue-dodge penalty (LP loss/temporary
+        ban), same as dodging manually in the client."""
+        path = (
+            "/lol-login/v1/session/invoke?destination=lcdsServiceProxy&method=call&"
+            'args=["","teambuilder-draft","quitV2",""]'
+        )
+        self._request("POST", creds, path)
+
+    def save_riot_id(self, creds: LCUCredentials, game_name: str, tag_line: str) -> None:
+        self._request(
+            "POST", creds, "/lol-summoner/v1/save-alias", json={"gameName": game_name, "tagLine": tag_line}
+        )
