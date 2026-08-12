@@ -200,7 +200,6 @@ def toggle_status_message_enabled(icon, item) -> None:
     enabled = not config.get_status_message_enabled()
     config.set_status_message_enabled(enabled)
     logger.info("Status message sync %s.", "enabled" if enabled else "disabled")
-    icon.update_menu()
 
 
 def status_message_enabled_checked(item) -> bool:
@@ -254,12 +253,10 @@ def _pick_league_dir_worker(icon) -> None:
     config.set_league_dir_override(Path(selected))
     league_dir_missing_notified = False
     icon.notify(f"LoL folder set to: {selected}", "LoL Profiler Tool")
-    icon.update_menu()
 
 
 def toggle_autostart(icon, item) -> None:
     autostart.toggle()
-    icon.update_menu()
 
 
 def autostart_checked(item) -> bool:
@@ -270,7 +267,6 @@ def toggle_logs(icon, item) -> None:
     enabled = not config.get_logs_enabled()
     config.set_logs_enabled(enabled)
     set_file_logging(enabled)
-    icon.update_menu()
 
 
 def logs_checked(item) -> bool:
@@ -281,7 +277,6 @@ def toggle_rank_override(icon, item) -> None:
     enabled = not config.get_rank_override_enabled()
     config.set_rank_override_enabled(enabled)
     logger.info("Rank override %s.", "enabled" if enabled else "disabled")
-    icon.update_menu()
 
 
 def rank_override_checked(item) -> bool:
@@ -302,7 +297,6 @@ def make_set_rank_tier_handler(tier: str):
         division = "I" if tier in RANK_TIERS_WITHOUT_DIVISION else override["division"]
         config.set_rank_override(tier, division, override["queue"])
         logger.info("Rank override set to: %s %s", tier, division)
-        icon.update_menu()
 
     return handler
 
@@ -323,7 +317,6 @@ def make_set_rank_division_handler(division: str):
         override = config.get_rank_override()
         config.set_rank_override(override["tier"], division, override["queue"])
         logger.info("Rank override set to: %s %s", override["tier"], division)
-        icon.update_menu()
 
     return handler
 
@@ -339,7 +332,6 @@ def toggle_auto_lobby_reveal(icon, item) -> None:
     enabled = not config.get_auto_lobby_reveal_enabled()
     config.set_auto_lobby_reveal_enabled(enabled)
     logger.info("Auto Lobby Reveal %s.", "enabled" if enabled else "disabled")
-    icon.update_menu()
 
 
 def auto_lobby_reveal_checked(item) -> bool:
@@ -378,7 +370,6 @@ def toggle_auto_accept(icon, item) -> None:
     enabled = not config.get_auto_accept_enabled()
     config.set_auto_accept_enabled(enabled)
     logger.info("Auto Accept %s.", "enabled" if enabled else "disabled")
-    icon.update_menu()
 
 
 def auto_accept_checked(item) -> bool:
@@ -546,7 +537,6 @@ def toggle_auto_update(icon, item) -> None:
     enabled = not config.get_auto_update_enabled()
     config.set_auto_update_enabled(enabled)
     logger.info("Auto Update %s.", "enabled" if enabled else "disabled")
-    icon.update_menu()
 
 
 def auto_update_checked(item) -> bool:
@@ -566,7 +556,6 @@ def check_for_update_now(icon: pystray.Icon, stop_event: threading.Event, *, not
             icon.notify(f"Update available: {info.version}. See the menu to install it.", "LoL Profiler Tool")
     elif notify_if_none:
         icon.notify("You're already on the latest version.", "LoL Profiler Tool")
-    icon.update_menu()
 
 
 def update_check_loop(stop_event: threading.Event, icon: pystray.Icon) -> None:
@@ -774,7 +763,18 @@ def main() -> None:
     )
 
     icon = TrayIcon(
-        "lol-profiler-tool", make_icon_image(STATE_COLORS["loading"]), "LoL Profiler Tool", menu,
+        # No native menu is ever displayed (TrayIcon's _on_notify fully
+        # overrides pystray's native click handling — see tray_icon.py),
+        # so pass None here rather than a real Menu: our custom popup
+        # renders straight from the `menu` object above via _tk_event_loop,
+        # never through pystray_icon.menu. Passing a real Menu here used to
+        # make main.py's many icon.update_menu() calls constantly rebuild a
+        # native win32 menu handle that was never shown — pure overhead,
+        # and the trigger for a confirmed pystray bug (WinError 1401,
+        # "invalid menu handle") during shutdown. Those update_menu() calls
+        # have been removed entirely now that there's nothing for them to
+        # update.
+        "lol-profiler-tool", make_icon_image(STATE_COLORS["loading"]), "LoL Profiler Tool", None,
         on_click=_on_tray_click,
     )
 
