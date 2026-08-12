@@ -48,7 +48,6 @@ _LABEL_TO_FILENAME = {
     "Change Riot ID...": "riot_id.png",
     "Settings": "settings.png",
     "Updates": "updates.png",
-    "Quit": "quit.png",
 }
 
 

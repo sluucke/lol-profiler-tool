@@ -16,6 +16,7 @@ from __future__ import annotations
 import tkinter as tk
 import webbrowser
 from pathlib import Path
+from typing import Callable
 
 import pystray
 from PIL import Image, ImageTk
@@ -111,22 +112,27 @@ class PopupMenu:
         y: int,
         *,
         header: tuple[str, str, Path, str] | None = None,
+        on_quit: "Callable[[pystray.Icon], None] | None" = None,
         chain: list[tk.Toplevel] | None = None,
         width: int = POPUP_WIDTH,
         parent: "PopupMenu | None" = None,
     ):
         """`header`, when given, is (app_name, version_text, avatar_path,
-        github_url) and is only rendered for the root popup. `chain` is the
-        shared list of every open Toplevel in this popup tree (root plus
-        any open flyouts) — passing the same list down lets any level
-        close the whole tree via close_all(). `parent` is the level that
-        opened this one as a flyout (None for the root) — used to bubble
-        refreshes up (e.g. a tier pick can change whether an *ancestor*
-        level's Division entry should be enabled) and to keep a flyout
-        open while the user is interacting with it."""
+        github_url) and is only rendered for the root popup. `on_quit`, also
+        root-only, is called (with the pystray icon) when the header's X
+        button is clicked — there's no more "Quit" menu item, since a
+        top-right close button is the more familiar place to look for it.
+        `chain` is the shared list of every open Toplevel in this popup tree
+        (root plus any open flyouts) — passing the same list down lets any
+        level close the whole tree via close_all(). `parent` is the level
+        that opened this one as a flyout (None for the root) — used to
+        bubble refreshes up (e.g. a tier pick can change whether an
+        *ancestor* level's Division entry should be enabled) and to keep a
+        flyout open while the user is interacting with it."""
         self._pystray_icon = pystray_icon
         self._menu = menu
         self._header_args = header
+        self._on_quit = on_quit
         self._width = width
         self._parent = parent
         self._chain = chain if chain is not None else []
@@ -228,15 +234,34 @@ class PopupMenu:
             node = node._parent
 
     def _build_header(self, name: str, version: str, avatar_path: Path, github_url: str) -> None:
-        row = tk.Frame(self._body, bg=BG_COLOR, cursor="hand2")
+        row = tk.Frame(self._body, bg=BG_COLOR)
         row.pack(fill="x", padx=4, pady=(6, 2))
+
+        if self._on_quit is not None:
+            close_label = tk.Label(
+                row, text="✕", bg=BG_COLOR, fg=DIM_TEXT_COLOR,
+                font=("Segoe UI", 10), cursor="hand2",
+            )
+            close_label.pack(side="right", padx=(4, 6), pady=4)
+
+            def on_quit_click(_event: object) -> None:
+                icon = self._pystray_icon
+                self.close_all()
+                self._on_quit(icon)
+
+            close_label.bind("<Button-1>", on_quit_click)
+            close_label.bind("<Enter>", lambda _e: close_label.configure(fg=TEXT_COLOR))
+            close_label.bind("<Leave>", lambda _e: close_label.configure(fg=DIM_TEXT_COLOR))
+
+        clickable = tk.Frame(row, bg=BG_COLOR, cursor="hand2")
+        clickable.pack(side="left", fill="x", expand=True)
 
         image = Image.open(avatar_path).convert("RGBA").resize((28, 28), Image.LANCZOS)
         self._avatar_image = ImageTk.PhotoImage(image, master=self.window)
-        avatar_label = tk.Label(row, image=self._avatar_image, bg=BG_COLOR)
+        avatar_label = tk.Label(clickable, image=self._avatar_image, bg=BG_COLOR)
         avatar_label.pack(side="left", padx=(6, 8), pady=4)
 
-        text_frame = tk.Frame(row, bg=BG_COLOR)
+        text_frame = tk.Frame(clickable, bg=BG_COLOR)
         text_frame.pack(side="left", fill="x", expand=True)
         tk.Label(
             text_frame, text=name, bg=BG_COLOR, fg=GOLD,
@@ -251,7 +276,7 @@ class PopupMenu:
             webbrowser.open(github_url)
             self.close_all()
 
-        for widget in (row, avatar_label, text_frame, *text_frame.winfo_children()):
+        for widget in (clickable, avatar_label, text_frame, *text_frame.winfo_children()):
             widget.bind("<Button-1>", open_repo)
 
         tk.Frame(self._body, bg=BORDER_COLOR, height=1).pack(fill="x", padx=8, pady=(4, 4))
@@ -360,8 +385,9 @@ class PopupMenu:
                 self._refresh_chain()
             else:
                 # Close *before* running the action, not after: an action
-                # like Quit triggers process shutdown on another thread,
-                # which can race destroying these windows if it happens
+                # like installing an update triggers process shutdown on
+                # another thread, which can race destroying these windows
+                # if it happens
                 # the other way around — leaving a dead popup visibly
                 # stuck on screen after the app has already exited.
                 self.close_all()
@@ -481,6 +507,7 @@ def show(
     app_version: str,
     avatar_path: Path,
     github_url: str,
+    on_quit: "Callable[[pystray.Icon], None] | None" = None,
 ) -> None:
     """Opens the popup so its bottom-left corner is at (x, y) — matching
     how a tray icon's context menu conventionally opens upward from the
@@ -492,4 +519,5 @@ def show(
         x,
         y,
         header=(app_name, f"v{app_version}", avatar_path, github_url),
+        on_quit=on_quit,
     )

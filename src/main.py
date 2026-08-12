@@ -604,7 +604,14 @@ def _apply_update(icon: pystray.Icon, stop_event: threading.Event, info: updater
 
     icon.notify("Update downloaded. Restarting...", "LoL Profiler Tool")
     stop_event.set()
-    icon.stop()
+    # Same reasoning as quit_app: the updater script is already waiting for
+    # this PID to disappear before it can move the install folder, so this
+    # process must actually die now, not just start a graceful shutdown that
+    # could stall on some thread and leave the files locked.
+    try:
+        icon.stop()
+    finally:
+        os._exit(0)
 
 
 def _shorten_path(path: Path, max_len: int = 40) -> str:
@@ -625,9 +632,20 @@ def league_dir_text(item) -> str:
 
 
 def make_quit_handler(stop_event: threading.Event):
-    def quit_app(icon, item) -> None:
+    def quit_app(icon: pystray.Icon) -> None:
+        # icon.stop()/pystray's own shutdown joins the setup thread (which
+        # runs sync_loop) and otherwise waits on Python's normal interpreter
+        # shutdown to collect every thread — if any of those is ever slow or
+        # stuck (a mid-flight LCU call, a wedged Tk thread, antivirus
+        # scanning), the process lingers in Task Manager with the install
+        # folder's files still locked, which is exactly what blocked manual
+        # updates. os._exit() is a hard OS-level exit that bypasses all of
+        # that, so Quit is guaranteed to actually end the process.
         stop_event.set()
-        icon.stop()
+        try:
+            icon.stop()
+        finally:
+            os._exit(0)
 
     return quit_app
 
@@ -641,7 +659,7 @@ def _on_tray_click(tray_icon: pystray.Icon, x: int, y: int) -> None:
     _popup_requests.put((tray_icon, x, y))
 
 
-def _tk_event_loop(menu: pystray.Menu) -> None:
+def _tk_event_loop(menu: pystray.Menu, on_quit) -> None:
     """Runs forever on its own thread and owns the one Tk root every popup
     window is created under. All tkinter calls for the popup menu happen
     on this thread; the tray icon's click handler only ever puts requests
@@ -662,6 +680,7 @@ def _tk_event_loop(menu: pystray.Menu) -> None:
                     app_version=updater.APP_VERSION,
                     avatar_path=BASE_ICON_PATH,
                     github_url=f"https://github.com/{updater.GITHUB_REPO}",
+                    on_quit=on_quit,
                 )
         except queue.Empty:
             pass
@@ -678,8 +697,7 @@ def main() -> None:
 
     menu = pystray.Menu(
         # Features first, for quick direct access — info rows about
-        # connection/folder status live further down, between Updates
-        # and Quit.
+        # connection/folder status live further down, at the bottom.
         pystray.MenuItem(
             "Status Message",
             pystray.Menu(
@@ -758,8 +776,6 @@ def main() -> None:
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(connected_text, None, enabled=False),
         pystray.MenuItem(league_dir_text, None, enabled=False),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit", make_quit_handler(stop_event)),
     )
 
     icon = TrayIcon(
@@ -778,7 +794,9 @@ def main() -> None:
         on_click=_on_tray_click,
     )
 
-    threading.Thread(target=_tk_event_loop, args=(menu,), daemon=True).start()
+    threading.Thread(
+        target=_tk_event_loop, args=(menu, make_quit_handler(stop_event)), daemon=True
+    ).start()
 
     def setup(icon: pystray.Icon) -> None:
         # Runs in its own thread once the tray backend is ready — only from here on
