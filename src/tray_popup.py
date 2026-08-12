@@ -1,0 +1,282 @@
+"""Custom-styled popup context menu for the tray icon.
+
+Renders a pystray.Menu tree — the exact same tree previously handed to
+pystray's native Windows menu — as a small, borderless, styled tkinter
+popup instead. This module has no feature-specific knowledge: it only
+knows how to turn MenuItem.text/checked/enabled/submenu into pixels and
+dispatch clicks back into MenuItem.__call__(icon), same as pystray's own
+native-menu code does.
+"""
+
+from __future__ import annotations
+
+import tkinter as tk
+import webbrowser
+from pathlib import Path
+
+import pystray
+from PIL import Image, ImageTk
+
+BG_COLOR = "#1a1a20"
+BORDER_COLOR = "#2e2e38"
+GOLD = "#c89b3c"
+HOVER_BG = "#332d1c"
+TEXT_COLOR = "#cccccc"
+DIM_TEXT_COLOR = "#777777"
+
+ROW_HEIGHT = 30
+ROW_PAD_X = 12
+POPUP_WIDTH = 260
+SUBMENU_WIDTH = 210
+FLYOUT_DELAY_MS = 180
+FADE_STEPS = 8
+FADE_INTERVAL_MS = 15
+
+
+def _flyout_x(parent_x: int, parent_width: int, submenu_width: int, screen_width: int) -> int:
+    """Where a submenu's left edge should be: to the right of the parent
+    popup, or to its left instead if that would overflow the screen."""
+    x = parent_x + parent_width
+    if x + submenu_width > screen_width:
+        return parent_x - submenu_width
+    return x
+
+
+class PopupMenu:
+    """A single popup window: the root menu, or one flyout level."""
+
+    def __init__(
+        self,
+        parent_tk: tk.Misc,
+        pystray_icon: pystray.Icon,
+        menu: pystray.Menu,
+        x: int,
+        y: int,
+        *,
+        header: tuple[str, str, Path, str] | None = None,
+        chain: list[tk.Toplevel] | None = None,
+        width: int = POPUP_WIDTH,
+    ):
+        """`header`, when given, is (app_name, version_text, avatar_path,
+        github_url) and is only rendered for the root popup. `chain` is the
+        shared list of every open Toplevel in this popup tree (root plus
+        any open flyouts) — passing the same list down lets any level
+        close the whole tree via close_all()."""
+        self._pystray_icon = pystray_icon
+        self._chain = chain if chain is not None else []
+        self._flyout: PopupMenu | None = None
+        self._flyout_after_id: str | None = None
+        self._avatar_image = None  # keep a reference so tkinter doesn't garbage-collect it
+
+        is_root = header is not None
+
+        self.window = tk.Toplevel(parent_tk)
+        self._chain.append(self.window)
+        win = self.window
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.attributes("-alpha", 0.0)
+        win.configure(bg=BORDER_COLOR)
+
+        outer = tk.Frame(win, bg=BORDER_COLOR, padx=1, pady=1)
+        outer.pack(fill="both", expand=True)
+        self._body = tk.Frame(outer, bg=BG_COLOR)
+        self._body.pack(fill="both", expand=True)
+
+        if header is not None:
+            self._build_header(*header)
+
+        for item in menu:
+            self._build_row(item, width)
+
+        win.update_idletasks()
+        placed_y = y - win.winfo_reqheight() if is_root else y
+        win.geometry(f"+{x}+{placed_y}")
+        self._clamp_to_screen()
+
+        win.bind("<Escape>", lambda _e: self.close_all())
+        win.bind("<FocusOut>", self._on_focus_out)
+
+        win.deiconify()
+        win.focus_force()
+        self._fade_in(0)
+
+    def _clamp_to_screen(self) -> None:
+        win = self.window
+        win.update_idletasks()
+        screen_w = win.winfo_screenwidth()
+        screen_h = win.winfo_screenheight()
+        x, y = win.winfo_x(), win.winfo_y()
+        w, h = win.winfo_width(), win.winfo_height()
+        x = min(x, screen_w - w - 4)
+        y = min(y, screen_h - h - 4)
+        win.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+    def _fade_in(self, step: int) -> None:
+        if not self.window.winfo_exists():
+            return
+        alpha = min(1.0, (step + 1) / FADE_STEPS)
+        self.window.attributes("-alpha", alpha)
+        if step + 1 < FADE_STEPS:
+            self.window.after(FADE_INTERVAL_MS, self._fade_in, step + 1)
+
+    def _build_header(self, name: str, version: str, avatar_path: Path, github_url: str) -> None:
+        row = tk.Frame(self._body, bg=BG_COLOR, cursor="hand2")
+        row.pack(fill="x", padx=4, pady=(6, 2))
+
+        image = Image.open(avatar_path).convert("RGBA").resize((28, 28), Image.LANCZOS)
+        self._avatar_image = ImageTk.PhotoImage(image)
+        avatar_label = tk.Label(row, image=self._avatar_image, bg=BG_COLOR)
+        avatar_label.pack(side="left", padx=(6, 8), pady=4)
+
+        text_frame = tk.Frame(row, bg=BG_COLOR)
+        text_frame.pack(side="left", fill="x", expand=True)
+        tk.Label(
+            text_frame, text=name, bg=BG_COLOR, fg=GOLD,
+            font=("Segoe UI", 9, "bold"), anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            text_frame, text=version, bg=BG_COLOR, fg=DIM_TEXT_COLOR,
+            font=("Segoe UI", 8), anchor="w",
+        ).pack(fill="x")
+
+        def open_repo(_event: object) -> None:
+            webbrowser.open(github_url)
+            self.close_all()
+
+        for widget in (row, avatar_label, text_frame, *text_frame.winfo_children()):
+            widget.bind("<Button-1>", open_repo)
+
+        tk.Frame(self._body, bg=BORDER_COLOR, height=1).pack(fill="x", padx=8, pady=(4, 4))
+
+    def _build_row(self, item: pystray.MenuItem, width: int) -> None:
+        if item is pystray.Menu.SEPARATOR:
+            tk.Frame(self._body, bg=BORDER_COLOR, height=1).pack(fill="x", padx=8, pady=4)
+            return
+
+        enabled = item.enabled
+        text = item.text
+        if item.checked:
+            text = f"✓ {text}"
+
+        row = tk.Frame(self._body, bg=BG_COLOR, height=ROW_HEIGHT)
+        row.pack(fill="x", padx=4, pady=1)
+        row.pack_propagate(False)
+
+        fg = TEXT_COLOR if enabled else DIM_TEXT_COLOR
+        label = tk.Label(
+            row, text=text, bg=BG_COLOR, fg=fg, anchor="w",
+            font=("Segoe UI", 9), padx=ROW_PAD_X,
+        )
+        label.pack(side="left", fill="both", expand=True)
+
+        arrow = None
+        if item.submenu is not None:
+            arrow = tk.Label(row, text="▸", bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
+            arrow.pack(side="right", padx=(0, ROW_PAD_X))
+
+        if not enabled:
+            return
+
+        widgets = [row, label] + ([arrow] if arrow else [])
+
+        def on_enter(_event: object) -> None:
+            for w in widgets:
+                w.configure(bg=HOVER_BG)
+            if item.submenu is not None:
+                self._schedule_flyout(item, row)
+            else:
+                self._cancel_flyout()
+
+        def on_leave(_event: object) -> None:
+            for w in widgets:
+                w.configure(bg=BG_COLOR)
+
+        def on_click(_event: object) -> None:
+            if item.submenu is not None:
+                return
+            self.close_all()
+            item(self._pystray_icon)
+
+        for w in widgets:
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+            w.bind("<Button-1>", on_click)
+
+    def _schedule_flyout(self, item: pystray.MenuItem, row: tk.Frame) -> None:
+        self._cancel_flyout(keep_pending=True)
+        self._flyout_after_id = self.window.after(
+            FLYOUT_DELAY_MS, lambda: self._open_flyout(item, row)
+        )
+
+    def _cancel_flyout(self, *, keep_pending: bool = False) -> None:
+        if self._flyout_after_id is not None:
+            self.window.after_cancel(self._flyout_after_id)
+            self._flyout_after_id = None
+        if not keep_pending and self._flyout is not None:
+            self._flyout.window.destroy()
+            self._flyout = None
+
+    def _open_flyout(self, item: pystray.MenuItem, row: tk.Frame) -> None:
+        if self._flyout is not None:
+            self._flyout.window.destroy()
+            self._flyout = None
+
+        row.update_idletasks()
+        screen_w = self.window.winfo_screenwidth()
+        abs_x = _flyout_x(self.window.winfo_x(), self.window.winfo_width(), SUBMENU_WIDTH, screen_w)
+        abs_y = row.winfo_rooty()
+
+        self._flyout = PopupMenu(
+            self.window,
+            self._pystray_icon,
+            item.submenu,
+            abs_x,
+            abs_y,
+            chain=self._chain,
+            width=SUBMENU_WIDTH,
+        )
+
+    def _on_focus_out(self, _event: object) -> None:
+        self.window.after(60, self._check_focus_after_out)
+
+    def _check_focus_after_out(self) -> None:
+        if not self.window.winfo_exists():
+            return
+        focused = self.window.focus_get()
+        if focused is None:
+            self.close_all()
+            return
+        if focused.winfo_toplevel() not in self._chain:
+            self.close_all()
+
+    def close_all(self) -> None:
+        for window in list(self._chain):
+            if window.winfo_exists():
+                window.destroy()
+        self._chain.clear()
+
+
+def show(
+    parent_tk: tk.Misc,
+    pystray_icon: pystray.Icon,
+    menu: pystray.Menu,
+    x: int,
+    y: int,
+    *,
+    app_name: str,
+    app_version: str,
+    avatar_path: Path,
+    github_url: str,
+) -> None:
+    """Opens the popup so its bottom-left corner is at (x, y) — matching
+    how a tray icon's context menu conventionally opens upward from the
+    taskbar, since (x, y) is the cursor position at click time."""
+    PopupMenu(
+        parent_tk,
+        pystray_icon,
+        menu,
+        x,
+        y,
+        header=(app_name, f"v{app_version}", avatar_path, github_url),
+    )
