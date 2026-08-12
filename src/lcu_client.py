@@ -145,3 +145,16 @@ class LCUClient:
         self._request(
             "POST", creds, "/lol-summoner/v1/save-alias", json={"gameName": game_name, "tagLine": tag_line}
         )
+
+    def set_profile_banner(self, creds: LCUCredentials, skin_id: int) -> None:
+        """Sets the profile background shown on the summoner card / in chat
+        to the given skin's splash art. Client-side cosmetic value, same
+        category as set_rank_override — doesn't require owning the skin.
+
+        Verified live against a running client: PUT and an array-wrapped
+        payload both fail (405 / 400 respectively) — the endpoint wants
+        POST with a bare key/value object."""
+        self._request(
+            "POST", creds, "/lol-summoner/v1/current-summoner/summoner-profile",
+            json={"key": "backgroundSkinId", "value": skin_id},
+        )
