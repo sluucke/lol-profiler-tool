@@ -328,7 +328,6 @@ class PopupMenu:
         def on_click(_event: object) -> None:
             if item.submenu is not None:
                 return
-            item(self._pystray_icon)
             if item.checked is not None:
                 # Toggle/radio picks stay open and refresh in place, so the
                 # new state is visible right away — closing the whole menu
@@ -337,9 +336,16 @@ class PopupMenu:
                 # just this level) matters when a pick here changes how an
                 # ancestor level should render, e.g. a rank tier pick
                 # enabling/disabling the parent's Division entry.
+                item(self._pystray_icon)
                 self._refresh_chain()
             else:
+                # Close *before* running the action, not after: an action
+                # like Quit triggers process shutdown on another thread,
+                # which can race destroying these windows if it happens
+                # the other way around — leaving a dead popup visibly
+                # stuck on screen after the app has already exited.
                 self.close_all()
+                item(self._pystray_icon)
 
         for w in widgets:
             w.bind("<Enter>", on_enter)
