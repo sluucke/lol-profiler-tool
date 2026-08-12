@@ -89,6 +89,11 @@ pyinstaller --noconfirm LoLProfilerTool.spec
 The executable is produced at `dist/LoLProfilerTool.exe` — a single file
 with no external dependencies.
 
+## Credits
+
+The tray menu's icons are from [Twemoji](https://github.com/twitter/twemoji)
+(CC-BY 4.0) — see `assets/icons/ATTRIBUTION.md`.
+
 ## Publishing a new version
 
 1. Bump the version in `pyproject.toml` and `APP_VERSION` (`updater.py`) to

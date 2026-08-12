@@ -53,6 +53,15 @@ def _icon_photo_for(label: str) -> ImageTk.PhotoImage | None:
     return _icon_photos.get(label)
 
 
+_toggle_photos: dict[bool, ImageTk.PhotoImage] = {}
+
+
+def _toggle_photo_for(on: bool) -> ImageTk.PhotoImage:
+    if on not in _toggle_photos:
+        _toggle_photos[on] = ImageTk.PhotoImage(tray_icons.toggle_switch(on))
+    return _toggle_photos[on]
+
+
 def _flyout_x(parent_x: int, parent_width: int, submenu_width: int, screen_width: int) -> int:
     """Where a submenu's left edge should be: to the right of the parent
     popup, or to its left instead if that would overflow the screen."""
@@ -182,7 +191,12 @@ class PopupMenu:
 
         enabled = item.enabled
         raw_text = item.text
-        text = f"✓ {raw_text}" if item.checked else raw_text
+        # Radio-style choices (e.g. the Rank/Division picks) get a check
+        # mark — there can be several in a list, so a switch per row would
+        # look like a wall of toggles. A plain on/off item gets an actual
+        # toggle-switch graphic instead of a text mark.
+        is_toggle = item.checked is not None and not item.radio
+        text = f"✓ {raw_text}" if (item.checked and not is_toggle) else raw_text
 
         row = tk.Frame(self._body, bg=BG_COLOR, height=ROW_HEIGHT, width=width - 8)
         row.pack(fill="x", padx=4, pady=1)
@@ -204,13 +218,20 @@ class PopupMenu:
             icon_label = tk.Label(icon_slot, image=icon_photo, bg=BG_COLOR)
             icon_label.place(relx=0.5, rely=0.5, anchor="center")
 
-        # The arrow (if any) must claim its space *before* the label packs
-        # with fill+expand, or the label greedily takes the whole
-        # remaining cavity and leaves nothing for the arrow.
+        # Whatever goes on the right (submenu arrow, or a toggle switch)
+        # must claim its space *before* the label packs with fill+expand,
+        # or the label greedily takes the whole remaining cavity and
+        # leaves nothing for it.
         arrow = None
+        toggle_label = None
         if item.submenu is not None:
             arrow = tk.Label(row, text="▸", bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
             arrow.pack(side="right", padx=(0, ROW_PAD_X))
+        elif is_toggle:
+            toggle_photo = _toggle_photo_for(bool(item.checked))
+            self._row_images.append(toggle_photo)
+            toggle_label = tk.Label(row, image=toggle_photo, bg=BG_COLOR)
+            toggle_label.pack(side="right", padx=(0, ROW_PAD_X))
 
         label = tk.Label(
             row, text=text, bg=BG_COLOR, fg=fg, anchor="w",
@@ -221,7 +242,12 @@ class PopupMenu:
         if not enabled:
             return
 
-        widgets = [row, icon_slot, label] + ([icon_label] if icon_label else []) + ([arrow] if arrow else [])
+        widgets = (
+            [row, icon_slot, label]
+            + ([icon_label] if icon_label else [])
+            + ([arrow] if arrow else [])
+            + ([toggle_label] if toggle_label else [])
+        )
 
         def on_enter(_event: object) -> None:
             for w in widgets:
