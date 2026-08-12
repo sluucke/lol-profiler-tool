@@ -5,7 +5,12 @@ a = Analysis(
     ['src/main.py'],
     pathex=['src'],
     binaries=[],
-    datas=[('assets/icon-1.png', 'assets'), ('assets/icons', 'assets/icons'), ('assets/rank', 'assets/rank')],
+    datas=[
+        ('assets/icon-1.png', 'assets'),
+        ('assets/icons', 'assets/icons'),
+        ('assets/rank', 'assets/rank'),
+        ('assets/champion_skins.json', 'assets'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
