@@ -39,6 +39,10 @@ chat, a lobby reveal shortcut, and self-update via GitHub Releases.
 - **Change Riot ID** — changes your account's game name/tag from the tray
   menu. **This uses your account's real rename allowance**, same as changing
   it from the client's own settings — it is not a cosmetic override.
+- **Change profile banner (cosmetic)** — search any champion/skin from the
+  tray menu and set it as your profile background. **This is purely
+  visual**, same category as the rank override — it does not require
+  owning the skin.
 - **File logging** — option to record everything (folder detection, client
   connection, message/rank updates, errors) to `logs.txt`, timestamped.
 - **Start with Windows** — toggle autostart from the tray menu.
