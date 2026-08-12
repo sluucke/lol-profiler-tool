@@ -22,7 +22,7 @@ import requests
 
 logger = logging.getLogger("lol-profiler-tool")
 
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.5.2"
 GITHUB_REPO = "sluucke/lol-profiler-tool"
 
 _RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -95,8 +95,11 @@ try {{
         Start-Sleep -Milliseconds 500
     }}
     # A moment for the OS/antivirus to release file handles even after the
-    # process object itself is gone.
-    Start-Sleep -Seconds 2
+    # process object itself is gone. Files sitting in Downloads (or any
+    # Mark-of-the-Web folder) commonly get re-scanned by Defender right
+    # after the process that loaded their DLLs exits, which holds an
+    # exclusive lock well past when the process itself is gone.
+    Start-Sleep -Seconds 5
 
     $installDir = "{install_dir}"
     $stagingDir = "{staging_dir}"
@@ -108,16 +111,18 @@ try {{
     }}
 
     # Move (not delete) the current install aside first — if anything below
-    # fails, the old install is still recoverable rather than gone.
+    # fails, the old install is still recoverable rather than gone. Retries
+    # for up to ~90s: an antivirus scan holding a lock on a freshly-exited
+    # process's DLLs can easily outlast a few seconds.
     $attempts = 0
     $movedAside = $false
-    while ($attempts -lt 20 -and -not $movedAside) {{
+    while ($attempts -lt 90 -and -not $movedAside) {{
         try {{
             Move-Item -Path $installDir -Destination $backupDir -ErrorAction Stop
             $movedAside = $true
         }} catch {{
             $attempts++
-            Start-Sleep -Milliseconds 500
+            Start-Sleep -Seconds 1
         }}
     }}
     if (-not $movedAside) {{
