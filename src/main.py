@@ -2,6 +2,7 @@
 
 import logging
 import os
+import queue
 import sys
 import threading
 import tkinter as tk
@@ -17,9 +18,11 @@ import config
 import dodge as dodge_feature
 import lobby_reveal
 import riotid_changer
+import tray_popup
 import updater
 from lcu_client import LCUClient, LCUError, read_credentials
 from paths import LOG_FILE, MESSAGE_FILE, resolve_league_dir
+from tray_icon import TrayIcon
 
 POLL_INTERVAL_SECONDS = 5
 UPDATE_CHECK_INTERVAL_SECONDS = 3600
@@ -568,12 +571,16 @@ def _apply_update(icon: pystray.Icon, stop_event: threading.Event, info: updater
 
 
 def connected_text(item) -> str:
-    return "LoL Client: connected" if connected.is_set() else "LoL Client: waiting..."
+    dot = "🟢" if connected.is_set() else "🟡"
+    status = "connected" if connected.is_set() else "waiting..."
+    return f"{dot} LoL Client: {status}"
 
 
 def league_dir_text(item) -> str:
     league_dir = resolve_league_dir()
-    return f"LoL folder: {league_dir}" if league_dir else "LoL folder: not found"
+    if league_dir:
+        return f"📁 {league_dir}"
+    return "🔴 LoL folder: not found"
 
 
 def make_quit_handler(stop_event: threading.Event):
@@ -584,22 +591,57 @@ def make_quit_handler(stop_event: threading.Event):
     return quit_app
 
 
+_popup_requests: "queue.Queue[tuple[pystray.Icon, int, int]]" = queue.Queue()
+
+
+def _on_tray_click(tray_icon: pystray.Icon, x: int, y: int) -> None:
+    """Runs on pystray's own win32 message-loop thread — must not touch
+    tkinter directly. Hands the click off to the dedicated Tk thread."""
+    _popup_requests.put((tray_icon, x, y))
+
+
+def _tk_event_loop(menu: pystray.Menu) -> None:
+    """Runs forever on its own thread and owns the one Tk root every popup
+    window is created under. All tkinter calls for the popup menu happen
+    on this thread; the tray icon's click handler only ever puts requests
+    on the queue, never touches tkinter directly. (The app's other
+    tkinter dialogs — folder picker, Riot ID form, dodge confirmation —
+    are unaffected: each still creates and destroys its own short-lived
+    Tk() root on its own worker thread, as before.)"""
+    root = tk.Tk()
+    root.withdraw()
+
+    def poll() -> None:
+        try:
+            while True:
+                tray_icon, x, y = _popup_requests.get_nowait()
+                tray_popup.show(
+                    root, tray_icon, menu, x, y,
+                    app_name="LoL Profiler Tool",
+                    app_version=updater.APP_VERSION,
+                    avatar_path=BASE_ICON_PATH,
+                    github_url=f"https://github.com/{updater.GITHUB_REPO}",
+                )
+        except queue.Empty:
+            pass
+        root.after(50, poll)
+
+    root.after(50, poll)
+    root.mainloop()
+
+
 def main() -> None:
     MESSAGE_FILE.touch(exist_ok=True)
     set_file_logging(config.get_logs_enabled())
     stop_event = threading.Event()
 
     menu = pystray.Menu(
-        pystray.MenuItem(
-            f"LoL Profiler Tool v{updater.APP_VERSION} - github.com/sluucke", None, enabled=False
-        ),
-        pystray.Menu.SEPARATOR,
         pystray.MenuItem(connected_text, None, enabled=False),
         pystray.MenuItem(league_dir_text, None, enabled=False),
         pystray.Menu.SEPARATOR,
         # Features: each self-contained (its own enable toggle + settings).
         pystray.MenuItem(
-            "Status Message",
+            "💬 Status Message",
             pystray.Menu(
                 pystray.MenuItem(
                     "Enable status message", toggle_status_message_enabled, checked=status_message_enabled_checked
@@ -610,7 +652,7 @@ def main() -> None:
             ),
         ),
         pystray.MenuItem(
-            "Rank Override",
+            "🏆 Rank Override",
             pystray.Menu(
                 pystray.MenuItem(rank_override_text, None, enabled=False),
                 pystray.MenuItem("Enable rank override", toggle_rank_override, checked=rank_override_checked),
@@ -639,7 +681,7 @@ def main() -> None:
             ),
         ),
         pystray.MenuItem(
-            "Lobby Reveal",
+            "👁️ Lobby Reveal",
             pystray.Menu(
                 pystray.MenuItem(
                     "Auto Lobby Reveal", toggle_auto_lobby_reveal, checked=auto_lobby_reveal_checked
@@ -648,13 +690,13 @@ def main() -> None:
                 pystray.MenuItem("Reveal lobby now", reveal_lobby_now),
             ),
         ),
-        pystray.MenuItem("Auto Accept", toggle_auto_accept, checked=auto_accept_checked),
-        pystray.MenuItem("Dodge champion select", dodge_champ_select),
-        pystray.MenuItem("Change Riot ID...", change_riot_id_menu),
+        pystray.MenuItem("✅ Auto Accept", toggle_auto_accept, checked=auto_accept_checked),
+        pystray.MenuItem("🏳️ Dodge champion select", dodge_champ_select),
+        pystray.MenuItem("🪪 Change Riot ID...", change_riot_id_menu),
         pystray.Menu.SEPARATOR,
         # App-level settings, unrelated to any one feature.
         pystray.MenuItem(
-            "Settings",
+            "⚙️ Settings",
             pystray.Menu(
                 pystray.MenuItem("Select LoL folder...", pick_league_dir),
                 pystray.MenuItem("Start with Windows", toggle_autostart, checked=autostart_checked),
@@ -662,7 +704,7 @@ def main() -> None:
             ),
         ),
         pystray.MenuItem(
-            "Updates",
+            "🔄 Updates",
             pystray.Menu(
                 pystray.MenuItem("Auto Update", toggle_auto_update, checked=auto_update_checked),
                 pystray.Menu.SEPARATOR,
@@ -673,12 +715,15 @@ def main() -> None:
             ),
         ),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit", make_quit_handler(stop_event)),
+        pystray.MenuItem("❌ Quit", make_quit_handler(stop_event)),
     )
 
-    icon = pystray.Icon(
-        "lol-profiler-tool", make_icon_image(STATE_COLORS["loading"]), "LoL Profiler Tool", menu
+    icon = TrayIcon(
+        "lol-profiler-tool", make_icon_image(STATE_COLORS["loading"]), "LoL Profiler Tool", menu,
+        on_click=_on_tray_click,
     )
+
+    threading.Thread(target=_tk_event_loop, args=(menu,), daemon=True).start()
 
     def setup(icon: pystray.Icon) -> None:
         # Runs in its own thread once the tray backend is ready — only from here on
