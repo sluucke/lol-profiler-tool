@@ -523,7 +523,7 @@ def _change_riot_id_worker(icon: pystray.Icon) -> None:
 
 
 def make_apply_banner_handler(icon: pystray.Icon, skin_id: int, skin_name: str):
-    def apply_banner(*_args) -> None:
+    def apply_banner(icon_arg, item) -> None:
         threading.Thread(target=_apply_banner_worker, args=(icon, skin_id, skin_name), daemon=True).start()
 
     return apply_banner
