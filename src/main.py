@@ -786,7 +786,7 @@ def main() -> None:
         pystray.MenuItem("Auto Accept", toggle_auto_accept, checked=auto_accept_checked),
         pystray.MenuItem("Dodge champion select", dodge_champ_select),
         pystray.MenuItem("Change Riot ID...", change_riot_id_menu),
-        pystray.MenuItem("Change Banner...", tray_popup.BANNER_SEARCH_MARKER),
+        pystray.MenuItem("Change profile banner", tray_popup.BANNER_SEARCH_MARKER),
         pystray.Menu.SEPARATOR,
         # App-level settings, unrelated to any one feature.
         pystray.MenuItem(

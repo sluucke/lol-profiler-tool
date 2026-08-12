@@ -45,8 +45,15 @@ FADE_INTERVAL_MS = 15
 # `action if isinstance(action, pystray.Menu) else None`), so it opens like
 # any other flyout — but PopupMenu._open_flyout checks for this object by
 # identity and opens a SearchFlyout instead of rendering it as a normal
-# (empty) menu.
-BANNER_SEARCH_MARKER = pystray.Menu()
+# menu. Must NOT be literally empty: pystray.Menu.__bool__ is
+# `len(self._visible_items()) > 0`, and MenuItem.visible (when its action is
+# a Menu) requires that Menu's own `.visible` to be True — an empty Menu is
+# falsy, which silently makes the owning "Change profile banner" MenuItem
+# invisible and filtered out of iteration before it ever reaches
+# _build_row. The dummy item below is never actually shown to the user:
+# _open_flyout intercepts this sentinel by identity before it would try to
+# render its contents as a real nested menu.
+BANNER_SEARCH_MARKER = pystray.Menu(pystray.MenuItem("", lambda *_: None))
 
 MAX_SEARCH_RESULTS = 8
 
