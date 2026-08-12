@@ -190,25 +190,33 @@ class PopupMenu:
 
         fg = TEXT_COLOR if enabled else DIM_TEXT_COLOR
 
-        icon_photo = _icon_photo_for(raw_text)
-        icon_slot = tk.Label(row, bg=BG_COLOR, width=ICON_SLOT_WIDTH)
+        # A plain tk.Label's `width` is in *character* units unless the
+        # label has an image — a Frame's `width` is always pixels, so it's
+        # the reliable way to reserve a fixed-size slot regardless of
+        # whether this row actually has an icon.
+        icon_slot = tk.Frame(row, bg=BG_COLOR, width=ICON_SLOT_WIDTH, height=ROW_HEIGHT)
         icon_slot.pack(side="left")
+        icon_slot.pack_propagate(False)
         icon_label = None
+        icon_photo = _icon_photo_for(raw_text)
         if icon_photo is not None:
             self._row_images.append(icon_photo)
             icon_label = tk.Label(icon_slot, image=icon_photo, bg=BG_COLOR)
             icon_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # The arrow (if any) must claim its space *before* the label packs
+        # with fill+expand, or the label greedily takes the whole
+        # remaining cavity and leaves nothing for the arrow.
+        arrow = None
+        if item.submenu is not None:
+            arrow = tk.Label(row, text="▸", bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
+            arrow.pack(side="right", padx=(0, ROW_PAD_X))
 
         label = tk.Label(
             row, text=text, bg=BG_COLOR, fg=fg, anchor="w",
             font=("Segoe UI", 9),
         )
         label.pack(side="left", fill="both", expand=True, padx=(0, ROW_PAD_X))
-
-        arrow = None
-        if item.submenu is not None:
-            arrow = tk.Label(row, text="▸", bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
-            arrow.pack(side="right", padx=(0, ROW_PAD_X))
 
         if not enabled:
             return
