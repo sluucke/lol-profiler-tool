@@ -52,6 +52,7 @@ RANK_TIERS = [
 ]
 RANK_DIVISIONS = ["I", "II", "III", "IV"]
 RANK_QUEUE = "RANKED_SOLO_5x5"  # the displayed rank is always for Solo/Duo
+RANK_TIERS_WITHOUT_DIVISION = {"MASTER", "GRANDMASTER", "CHALLENGER"}
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger("lol-profiler-tool")
@@ -295,11 +296,19 @@ def rank_override_text(item) -> str:
 def make_set_rank_tier_handler(tier: str):
     def handler(icon, item) -> None:
         override = config.get_rank_override()
-        config.set_rank_override(tier, override["division"], override["queue"])
-        logger.info("Rank override set to: %s %s", tier, override["division"])
+        # Master+ tiers have no division in League — always store "I" for
+        # them rather than carrying over whatever division was last picked
+        # for a lower tier.
+        division = "I" if tier in RANK_TIERS_WITHOUT_DIVISION else override["division"]
+        config.set_rank_override(tier, division, override["queue"])
+        logger.info("Rank override set to: %s %s", tier, division)
         icon.update_menu()
 
     return handler
+
+
+def division_picker_enabled(item) -> bool:
+    return config.get_rank_override()["tier"] not in RANK_TIERS_WITHOUT_DIVISION
 
 
 def make_rank_tier_checked(tier: str):
@@ -719,6 +728,7 @@ def main() -> None:
                         )
                         for division in RANK_DIVISIONS
                     ]),
+                    enabled=division_picker_enabled,
                 ),
             ),
         ),

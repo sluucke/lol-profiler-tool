@@ -61,6 +61,18 @@ def _icon_photo_for(label: str, master: tk.Misc) -> ImageTk.PhotoImage | None:
     return _icon_photos.get(label)
 
 
+_rank_icon_photos: dict[str, ImageTk.PhotoImage] | None = None
+
+
+def _rank_icon_photo_for(tier: str, master: tk.Misc) -> ImageTk.PhotoImage | None:
+    global _rank_icon_photos
+    if _rank_icon_photos is None:
+        _rank_icon_photos = {
+            name: ImageTk.PhotoImage(image, master=master) for name, image in tray_icons.build_rank_icons().items()
+        }
+    return _rank_icon_photos.get(tier)
+
+
 _toggle_photos: dict[bool, ImageTk.PhotoImage] = {}
 
 
@@ -100,6 +112,9 @@ class PopupMenu:
         any open flyouts) — passing the same list down lets any level
         close the whole tree via close_all()."""
         self._pystray_icon = pystray_icon
+        self._menu = menu
+        self._header_args = header
+        self._width = width
         self._chain = chain if chain is not None else []
         self._flyout: PopupMenu | None = None
         self._flyout_item: pystray.MenuItem | None = None
@@ -164,6 +179,20 @@ class PopupMenu:
         if step + 1 < FADE_STEPS:
             self.window.after(FADE_INTERVAL_MS, self._fade_in, step + 1)
 
+    def _refresh(self) -> None:
+        """Rebuilds this level's rows in place — used after a toggle/radio
+        click instead of closing the whole popup, so the new on/off or
+        selected state is visible immediately without the user having to
+        reopen the menu."""
+        for child in list(self._body.winfo_children()):
+            child.destroy()
+        self._row_images.clear()
+        if self._header_args is not None:
+            self._build_header(*self._header_args)
+        for item in self._menu:
+            self._build_row(item, self._width)
+        self.window.update_idletasks()
+
     def _build_header(self, name: str, version: str, avatar_path: Path, github_url: str) -> None:
         row = tk.Frame(self._body, bg=BG_COLOR, cursor="hand2")
         row.pack(fill="x", padx=4, pady=(6, 2))
@@ -221,7 +250,7 @@ class PopupMenu:
         icon_slot.pack(side="left")
         icon_slot.pack_propagate(False)
         icon_label = None
-        icon_photo = _icon_photo_for(raw_text, self.window)
+        icon_photo = _icon_photo_for(raw_text, self.window) or _rank_icon_photo_for(raw_text, self.window)
         if icon_photo is not None:
             self._row_images.append(icon_photo)
             icon_label = tk.Label(icon_slot, image=icon_photo, bg=BG_COLOR)
@@ -273,8 +302,15 @@ class PopupMenu:
         def on_click(_event: object) -> None:
             if item.submenu is not None:
                 return
-            self.close_all()
             item(self._pystray_icon)
+            if item.checked is not None:
+                # Toggle/radio picks stay open and refresh in place, so the
+                # new state is visible right away — closing the whole menu
+                # on every checkbox click would make it tedious to flip a
+                # few settings in a row.
+                self._refresh()
+            else:
+                self.close_all()
 
         for w in widgets:
             w.bind("<Enter>", on_enter)

@@ -20,8 +20,24 @@ ICON_SIZE = 18
 
 if getattr(sys, "_MEIPASS", None):
     _ICONS_DIR = Path(sys._MEIPASS) / "assets" / "icons"
+    _RANK_ICONS_DIR = Path(sys._MEIPASS) / "assets" / "rank"
 else:
     _ICONS_DIR = Path(__file__).resolve().parent.parent / "assets" / "icons"
+    _RANK_ICONS_DIR = Path(__file__).resolve().parent.parent / "assets" / "rank"
+
+# Keyed by the same tier names used in main.py's RANK_TIERS.
+_RANK_TIER_TO_FILENAME = {
+    "IRON": "iron.png",
+    "BRONZE": "bronze.png",
+    "SILVER": "silver.png",
+    "GOLD": "gold.png",
+    "PLATINUM": "platinum.webp",
+    "EMERALD": "emerald.png",
+    "DIAMOND": "diamond.png",
+    "MASTER": "master.png",
+    "GRANDMASTER": "grandmaster.png",
+    "CHALLENGER": "challenger.png",
+}
 
 _LABEL_TO_FILENAME = {
     "Status Message": "status_message.png",
@@ -44,6 +60,15 @@ def riot_id_icon(size: int = ICON_SIZE) -> Image.Image:
     """Public accessor for the Riot ID icon, used outside the menu (e.g.
     the Change Riot ID dialog's header) at whatever size is needed."""
     return _load("riot_id.png", size)
+
+
+def build_rank_icons() -> dict[str, Image.Image]:
+    """Keyed by rank tier name (IRON, BRONZE, ... — matches main.py's
+    RANK_TIERS)."""
+    return {
+        tier: Image.open(_RANK_ICONS_DIR / filename).convert("RGBA").resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
+        for tier, filename in _RANK_TIER_TO_FILENAME.items()
+    }
 
 
 def build_icons_by_label() -> dict[str, Image.Image]:
