@@ -570,17 +570,21 @@ def _apply_update(icon: pystray.Icon, stop_event: threading.Event, info: updater
     icon.stop()
 
 
+def _shorten_path(path: Path, max_len: int = 40) -> str:
+    text = str(path)
+    if len(text) <= max_len:
+        return text
+    return f"{path.drive}\\...\\{path.name}"
+
+
 def connected_text(item) -> str:
-    dot = "🟢" if connected.is_set() else "🟡"
     status = "connected" if connected.is_set() else "waiting..."
-    return f"{dot} LoL Client: {status}"
+    return f"LoL Client: {status}"
 
 
 def league_dir_text(item) -> str:
     league_dir = resolve_league_dir()
-    if league_dir:
-        return f"📁 {league_dir}"
-    return "🔴 LoL folder: not found"
+    return f"LoL folder: {_shorten_path(league_dir)}" if league_dir else "LoL folder: not found"
 
 
 def make_quit_handler(stop_event: threading.Event):
@@ -641,7 +645,7 @@ def main() -> None:
         pystray.Menu.SEPARATOR,
         # Features: each self-contained (its own enable toggle + settings).
         pystray.MenuItem(
-            "💬 Status Message",
+            "Status Message",
             pystray.Menu(
                 pystray.MenuItem(
                     "Enable status message", toggle_status_message_enabled, checked=status_message_enabled_checked
@@ -652,7 +656,7 @@ def main() -> None:
             ),
         ),
         pystray.MenuItem(
-            "🏆 Rank Override",
+            "Rank Override",
             pystray.Menu(
                 pystray.MenuItem(rank_override_text, None, enabled=False),
                 pystray.MenuItem("Enable rank override", toggle_rank_override, checked=rank_override_checked),
@@ -681,7 +685,7 @@ def main() -> None:
             ),
         ),
         pystray.MenuItem(
-            "👁️ Lobby Reveal",
+            "Lobby Reveal",
             pystray.Menu(
                 pystray.MenuItem(
                     "Auto Lobby Reveal", toggle_auto_lobby_reveal, checked=auto_lobby_reveal_checked
@@ -690,13 +694,13 @@ def main() -> None:
                 pystray.MenuItem("Reveal lobby now", reveal_lobby_now),
             ),
         ),
-        pystray.MenuItem("✅ Auto Accept", toggle_auto_accept, checked=auto_accept_checked),
-        pystray.MenuItem("🏳️ Dodge champion select", dodge_champ_select),
-        pystray.MenuItem("🪪 Change Riot ID...", change_riot_id_menu),
+        pystray.MenuItem("Auto Accept", toggle_auto_accept, checked=auto_accept_checked),
+        pystray.MenuItem("Dodge champion select", dodge_champ_select),
+        pystray.MenuItem("Change Riot ID...", change_riot_id_menu),
         pystray.Menu.SEPARATOR,
         # App-level settings, unrelated to any one feature.
         pystray.MenuItem(
-            "⚙️ Settings",
+            "Settings",
             pystray.Menu(
                 pystray.MenuItem("Select LoL folder...", pick_league_dir),
                 pystray.MenuItem("Start with Windows", toggle_autostart, checked=autostart_checked),
@@ -704,7 +708,7 @@ def main() -> None:
             ),
         ),
         pystray.MenuItem(
-            "🔄 Updates",
+            "Updates",
             pystray.Menu(
                 pystray.MenuItem("Auto Update", toggle_auto_update, checked=auto_update_checked),
                 pystray.Menu.SEPARATOR,
@@ -715,7 +719,7 @@ def main() -> None:
             ),
         ),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("❌ Quit", make_quit_handler(stop_event)),
+        pystray.MenuItem("Quit", make_quit_handler(stop_event)),
     )
 
     icon = TrayIcon(

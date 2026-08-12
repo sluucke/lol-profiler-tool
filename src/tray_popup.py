@@ -2,10 +2,13 @@
 
 Renders a pystray.Menu tree — the exact same tree previously handed to
 pystray's native Windows menu — as a small, borderless, styled tkinter
-popup instead. This module has no feature-specific knowledge: it only
-knows how to turn MenuItem.text/checked/enabled/submenu into pixels and
-dispatch clicks back into MenuItem.__call__(icon), same as pystray's own
-native-menu code does.
+popup instead. This module has no feature-specific knowledge about what
+any item *does*: it only knows how to turn MenuItem.text/checked/enabled/
+submenu into pixels and dispatch clicks back into MenuItem.__call__(icon),
+same as pystray's own native-menu code does. It does, however, know how
+to look up a drawn icon for a handful of known top-level labels (see
+tray_icons.py) — falling back to no icon for anything it doesn't
+recognize, so it still renders any menu tree correctly.
 """
 
 from __future__ import annotations
@@ -17,6 +20,8 @@ from pathlib import Path
 import pystray
 from PIL import Image, ImageTk
 
+import tray_icons
+
 BG_COLOR = "#1a1a20"
 BORDER_COLOR = "#2e2e38"
 GOLD = "#c89b3c"
@@ -25,12 +30,27 @@ TEXT_COLOR = "#cccccc"
 DIM_TEXT_COLOR = "#777777"
 
 ROW_HEIGHT = 30
-ROW_PAD_X = 12
-POPUP_WIDTH = 260
-SUBMENU_WIDTH = 210
+ROW_PAD_X = 10
+ICON_SLOT_WIDTH = 30
+POPUP_WIDTH = 300
+SUBMENU_WIDTH = 230
 FLYOUT_DELAY_MS = 180
 FADE_STEPS = 8
 FADE_INTERVAL_MS = 15
+
+# Populated lazily on first use (needs a live Tk root for PIL<->Tk image
+# conversion), then reused for every popup/flyout for the rest of the
+# app's life.
+_icon_photos: dict[str, ImageTk.PhotoImage] | None = None
+
+
+def _icon_photo_for(label: str) -> ImageTk.PhotoImage | None:
+    global _icon_photos
+    if _icon_photos is None:
+        _icon_photos = {
+            name: ImageTk.PhotoImage(image) for name, image in tray_icons.build_icons_by_label().items()
+        }
+    return _icon_photos.get(label)
 
 
 def _flyout_x(parent_x: int, parent_width: int, submenu_width: int, screen_width: int) -> int:
@@ -66,7 +86,8 @@ class PopupMenu:
         self._chain = chain if chain is not None else []
         self._flyout: PopupMenu | None = None
         self._flyout_after_id: str | None = None
-        self._avatar_image = None  # keep a reference so tkinter doesn't garbage-collect it
+        self._avatar_image = None  # keep references so tkinter doesn't garbage-collect them
+        self._row_images: list[ImageTk.PhotoImage] = []
 
         is_root = header is not None
 
@@ -82,6 +103,11 @@ class PopupMenu:
         outer.pack(fill="both", expand=True)
         self._body = tk.Frame(outer, bg=BG_COLOR)
         self._body.pack(fill="both", expand=True)
+        # No pack_propagate(False) here: it would freeze *both* dimensions
+        # at whatever the frame's size happened to be before any row
+        # widgets exist (i.e. collapsed to ~0). Each row below locks its
+        # own width instead, which is enough to keep the whole popup at a
+        # consistent width without capping its height too.
 
         if header is not None:
             self._build_header(*header)
@@ -155,20 +181,29 @@ class PopupMenu:
             return
 
         enabled = item.enabled
-        text = item.text
-        if item.checked:
-            text = f"✓ {text}"
+        raw_text = item.text
+        text = f"✓ {raw_text}" if item.checked else raw_text
 
-        row = tk.Frame(self._body, bg=BG_COLOR, height=ROW_HEIGHT)
+        row = tk.Frame(self._body, bg=BG_COLOR, height=ROW_HEIGHT, width=width - 8)
         row.pack(fill="x", padx=4, pady=1)
         row.pack_propagate(False)
 
         fg = TEXT_COLOR if enabled else DIM_TEXT_COLOR
+
+        icon_photo = _icon_photo_for(raw_text)
+        icon_slot = tk.Label(row, bg=BG_COLOR, width=ICON_SLOT_WIDTH)
+        icon_slot.pack(side="left")
+        icon_label = None
+        if icon_photo is not None:
+            self._row_images.append(icon_photo)
+            icon_label = tk.Label(icon_slot, image=icon_photo, bg=BG_COLOR)
+            icon_label.place(relx=0.5, rely=0.5, anchor="center")
+
         label = tk.Label(
             row, text=text, bg=BG_COLOR, fg=fg, anchor="w",
-            font=("Segoe UI", 9), padx=ROW_PAD_X,
+            font=("Segoe UI", 9),
         )
-        label.pack(side="left", fill="both", expand=True)
+        label.pack(side="left", fill="both", expand=True, padx=(0, ROW_PAD_X))
 
         arrow = None
         if item.submenu is not None:
@@ -178,7 +213,7 @@ class PopupMenu:
         if not enabled:
             return
 
-        widgets = [row, label] + ([arrow] if arrow else [])
+        widgets = [row, icon_slot, label] + ([icon_label] if icon_label else []) + ([arrow] if arrow else [])
 
         def on_enter(_event: object) -> None:
             for w in widgets:
