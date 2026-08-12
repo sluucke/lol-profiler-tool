@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageTk
 
 import autostart
 import auto_accept
+import banner
 import config
 import dodge as dodge_feature
 import lobby_reveal
@@ -521,6 +522,37 @@ def _change_riot_id_worker(icon: pystray.Icon) -> None:
         icon.notify(f"Riot ID change failed: {exc}", "LoL Profiler Tool")
 
 
+def make_apply_banner_handler(icon: pystray.Icon, skin_id: int, skin_name: str):
+    def apply_banner(*_args) -> None:
+        threading.Thread(target=_apply_banner_worker, args=(icon, skin_id, skin_name), daemon=True).start()
+
+    return apply_banner
+
+
+def _apply_banner_worker(icon: pystray.Icon, skin_id: int, skin_name: str) -> None:
+    creds = read_credentials()
+    if creds is None:
+        icon.notify("LoL client is not open.", "LoL Profiler Tool")
+        return
+    try:
+        client.set_profile_banner(creds, skin_id)
+        logger.info("Banner changed to: %s", skin_name)
+        icon.notify(f"Banner changed to: {skin_name}", "LoL Profiler Tool")
+    except LCUError as exc:
+        logger.warning("Banner change failed: %s", exc)
+        icon.notify(f"Banner change failed: {exc}", "LoL Profiler Tool")
+
+
+def make_banner_skin_menu(icon: pystray.Icon):
+    def skin_menu_fn(champion: str) -> pystray.Menu:
+        return pystray.Menu(*[
+            pystray.MenuItem(skin_name, make_apply_banner_handler(icon, skin_id, skin_name))
+            for skin_name, skin_id in banner.skins_for_champion(champion)
+        ])
+
+    return skin_menu_fn
+
+
 def announce_update_if_applicable(icon: pystray.Icon) -> None:
     """Notifies once when this run's version differs from the last one we
     recorded — the only reliable way to confirm an update actually applied,
@@ -681,6 +713,8 @@ def _tk_event_loop(menu: pystray.Menu, on_quit) -> None:
                     avatar_path=BASE_ICON_PATH,
                     github_url=f"https://github.com/{updater.GITHUB_REPO}",
                     on_quit=on_quit,
+                    banner_search_fn=banner.search_champions,
+                    banner_skin_menu_fn=make_banner_skin_menu(tray_icon),
                 )
         except queue.Empty:
             pass
@@ -752,6 +786,7 @@ def main() -> None:
         pystray.MenuItem("Auto Accept", toggle_auto_accept, checked=auto_accept_checked),
         pystray.MenuItem("Dodge champion select", dodge_champ_select),
         pystray.MenuItem("Change Riot ID...", change_riot_id_menu),
+        pystray.MenuItem("Change Banner...", tray_popup.BANNER_SEARCH_MARKER),
         pystray.Menu.SEPARATOR,
         # App-level settings, unrelated to any one feature.
         pystray.MenuItem(
