@@ -1,81 +1,79 @@
 # LoL Status Updater
 
-App de bandeja (system tray) para Windows que mantém a *status message* do
-League of Legends sincronizada com um arquivo de texto local, com detecção
-automática da instalação do jogo, indicador visual de status, um override
-cosmético de elo exibido no chat, e autoatualização via GitHub Releases.
+A Windows system tray app that keeps your League of Legends status message
+synced with a local text file, with automatic detection of the game
+installation, a visual status indicator, a cosmetic rank override shown in
+chat, and self-update via GitHub Releases.
 
-## Funcionalidades
+## Features
 
-- **Status message automática** — mantém a mensagem de status do LoL sempre
-  igual ao conteúdo de `message.txt`. Edita o arquivo, o client atualiza
-  sozinho no próximo ciclo (a cada 5s), sem precisar reabrir nada.
-- **Detecção automática da pasta do LoL** — lê
-  `%PROGRAMDATA%\Riot Games\RiotClientInstalls.json` pra achar onde o jogo
-  está instalado, mesmo em outro disco/pasta. Se falhar, dá pra apontar
-  manualmente pelo menu da bandeja.
-- **Ícone de status colorido** — a bolinha no ícone da bandeja indica o
-  estado: 🟢 verde (sincronizando), 🟡 amarelo (aguardando o client abrir),
-  🔴 vermelho (pasta não encontrada ou erro de comunicação com o client).
-- **Elo customizado (cosmético)** — permite trocar o tier/divisão exibido
-  no chat/hover card do client. **Isso é só visual** — não altera seu elo
-  real de matchmaking nem nenhum dado da Riot, é o mesmo campo que aparece
-  pro seus amigos no card de perfil.
-- **Logs em arquivo** — opção pra gravar tudo (detecção da pasta, conexão
-  com o client, atualizações de mensagem/elo, erros) em `logs.txt`, com
-  data/hora em cada linha.
-- **Iniciar com o Windows** — liga/desliga o autostart pelo próprio menu.
-- **Autoatualização** — checa releases novas no GitHub automaticamente
-  (a cada hora) e a cada uma encontrada, dá pra instalar com um clique
-  direto pelo menu.
+- **Automatic status message** — keeps your LoL status message in sync with
+  `message.txt`. Edit the file, the client updates on its own on the next
+  cycle (every 5s), no need to reopen anything.
+- **Automatic LoL folder detection** — reads
+  `%PROGRAMDATA%\Riot Games\RiotClientInstalls.json` to find where the game
+  is installed, even on another drive/folder. If detection fails, you can
+  point to it manually from the tray menu.
+- **Colored status icon** — the dot on the tray icon shows the current
+  state: 🟢 green (syncing), 🟡 yellow (waiting for the client to open),
+  🔴 red (folder not found or error talking to the client).
+- **Rank override (cosmetic)** — lets you change the tier/division shown in
+  the client's chat/hover card. **This is purely visual** — it does not
+  change your actual matchmaking rank or any Riot-side data, it's the same
+  field your friends see on your profile card.
+- **File logging** — option to record everything (folder detection, client
+  connection, message/rank updates, errors) to `logs.txt`, timestamped.
+- **Start with Windows** — toggle autostart from the tray menu.
+- **Self-update** — automatically checks for new GitHub releases (every
+  hour), and lets you install one with a single click from the menu.
 
-## Como funciona
+## How it works
 
-Roda em segundo plano na bandeja do sistema, verificando a cada 5 segundos:
+Runs in the background in the system tray, checking every 5 seconds:
 
-1. Resolve a pasta de instalação do LoL (override manual > auto-detecção).
-2. Verifica se o client está aberto (lendo o `lockfile` que ele gera).
-3. Se estiver, compara a status message atual com `message.txt` e o elo
-   configurado (se o override estiver ativo) e atualiza via LCU API
-   (`PUT /lol-chat/v1/me`) o que estiver diferente.
+1. Resolves the LoL install folder (manual override > auto-detection).
+2. Checks whether the client is open (by reading the `lockfile` it writes).
+3. If it is, compares the current status message against `message.txt` and
+   the configured rank override (if enabled), and updates via the LCU API
+   (`PUT /lol-chat/v1/me`) whatever changed.
 
-Dados do app (`message.txt`, `config.json`, `logs.txt`) ficam sempre em
-`%TEMP%\LoLStatusUpdater`, independente de onde o `.exe` for executado —
-não precisa manter os arquivos junto do executável.
+App data (`message.txt`, `config.json`, `logs.txt`) always lives in
+`%TEMP%\LoLStatusUpdater`, regardless of where the `.exe` is run from — no
+need to keep files next to the executable.
 
-## Uso
+## Usage
 
-### Rodando o `.exe` (recomendado)
+### Running the `.exe` (recommended)
 
-Baixe o `.exe` mais recente na aba [Releases](../../releases), execute, e
-use o menu da bandeja pra tudo (editar mensagem, escolher elo, ativar
-logs/autostart, etc). Nenhuma instalação é necessária.
+Download the latest `.exe` from the [Releases](../../releases) tab, run it,
+and use the tray menu for everything (edit message, choose rank, toggle
+logs/autostart, etc). No installation required.
 
-### Rodando a partir do código-fonte
+### Running from source
 
-Requer Windows e Python 3.14+.
+Requires Windows and Python 3.14+.
 
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
-## Gerando o `.exe`
+## Building the `.exe`
 
 ```bash
 pip install pyinstaller
 pyinstaller --noconfirm LoLStatusUpdater.spec
 ```
 
-O executável sai em `dist/LoLStatusUpdater.exe` — um único arquivo,
-sem dependências externas.
+The executable is produced at `dist/LoLStatusUpdater.exe` — a single file
+with no external dependencies.
 
-## Publicando uma nova versão
+## Publishing a new version
 
-1. Atualize a versão em `pyproject.toml` e em `APP_VERSION` (`updater.py`)
-   pra bater com a tag que vai criar (ex: `1.1.0` → tag `v1.1.0`).
-2. Gere o `.exe` (comando acima).
-3. Crie uma tag e uma release no GitHub com essa tag, anexando o
-   `LoLStatusUpdater.exe` gerado como asset.
-4. Quem já tem uma versão mais antiga instalada recebe a notificação de
-   atualização automaticamente e pode instalar direto pelo menu da bandeja.
+1. Bump the version in `pyproject.toml` and `APP_VERSION` (`updater.py`) to
+   match the tag you're about to create (e.g. `1.1.0` → tag `v1.1.0`).
+2. Build the `.exe` (command above).
+3. Create a tag and a GitHub release with that tag, attaching the generated
+   `LoLStatusUpdater.exe` as an asset.
+4. Anyone running an older version gets notified automatically and can
+   install the update with one click from the tray menu.
