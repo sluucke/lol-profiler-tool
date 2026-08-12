@@ -83,6 +83,13 @@ def _toggle_photo_for(on: bool, master: tk.Misc) -> ImageTk.PhotoImage:
     return _toggle_photos[on]
 
 
+def _row_has_icon(item: pystray.MenuItem, master: tk.Misc) -> bool:
+    return (
+        item is not pystray.Menu.SEPARATOR
+        and (_icon_photo_for(item.text, master) or _rank_icon_photo_for(item.text, master)) is not None
+    )
+
+
 def _flyout_x(parent_x: int, parent_width: int, submenu_width: int, screen_width: int) -> int:
     """Where a submenu's left edge should be: to the right of the parent
     popup, or to its left instead if that would overflow the screen."""
@@ -152,8 +159,15 @@ class PopupMenu:
         if header is not None:
             self._build_header(*header)
 
+        # Reserving an icon-width gutter on every row only makes sense if
+        # *something* in this level actually has an icon — otherwise it's
+        # just unexplained left padding pushing all the text over (e.g. a
+        # feature's own submenu, like Status Message's "Enable status
+        # message" / "Edit message" / "Force update", none of which have
+        # icons).
+        has_icons = any(_row_has_icon(item, self.window) for item in menu)
         for item in menu:
-            self._build_row(item, width)
+            self._build_row(item, width, has_icons)
 
         win.update_idletasks()
         placed_y = y - win.winfo_reqheight() if is_root else y
@@ -196,8 +210,9 @@ class PopupMenu:
         self._row_images.clear()
         if self._header_args is not None:
             self._build_header(*self._header_args)
+        has_icons = any(_row_has_icon(item, self.window) for item in self._menu)
         for item in self._menu:
-            self._build_row(item, self._width)
+            self._build_row(item, self._width, has_icons)
         self.window.update_idletasks()
 
     def _refresh_chain(self) -> None:
@@ -241,7 +256,7 @@ class PopupMenu:
 
         tk.Frame(self._body, bg=BORDER_COLOR, height=1).pack(fill="x", padx=8, pady=(4, 4))
 
-    def _build_row(self, item: pystray.MenuItem, width: int) -> None:
+    def _build_row(self, item: pystray.MenuItem, width: int, has_icons: bool) -> None:
         if item is pystray.Menu.SEPARATOR:
             tk.Frame(self._body, bg=BORDER_COLOR, height=1).pack(fill="x", padx=8, pady=4)
             return
@@ -265,16 +280,20 @@ class PopupMenu:
         # A plain tk.Label's `width` is in *character* units unless the
         # label has an image — a Frame's `width` is always pixels, so it's
         # the reliable way to reserve a fixed-size slot regardless of
-        # whether this row actually has an icon.
-        icon_slot = tk.Frame(row, bg=default_bg, width=ICON_SLOT_WIDTH, height=ROW_HEIGHT)
-        icon_slot.pack(side="left")
-        icon_slot.pack_propagate(False)
+        # whether this row actually has an icon. Only reserved at all if
+        # something in this level has an icon (see the has_icons comment
+        # in __init__) — otherwise it's just unexplained left padding.
+        icon_slot = None
         icon_label = None
-        icon_photo = _icon_photo_for(raw_text, self.window) or _rank_icon_photo_for(raw_text, self.window)
-        if icon_photo is not None:
-            self._row_images.append(icon_photo)
-            icon_label = tk.Label(icon_slot, image=icon_photo, bg=default_bg)
-            icon_label.place(relx=0.5, rely=0.5, anchor="center")
+        if has_icons:
+            icon_slot = tk.Frame(row, bg=default_bg, width=ICON_SLOT_WIDTH, height=ROW_HEIGHT)
+            icon_slot.pack(side="left")
+            icon_slot.pack_propagate(False)
+            icon_photo = _icon_photo_for(raw_text, self.window) or _rank_icon_photo_for(raw_text, self.window)
+            if icon_photo is not None:
+                self._row_images.append(icon_photo)
+                icon_label = tk.Label(icon_slot, image=icon_photo, bg=default_bg)
+                icon_label.place(relx=0.5, rely=0.5, anchor="center")
 
         # Whatever goes on the right (submenu arrow, or a toggle switch)
         # must claim its space *before* the label packs with fill+expand,
@@ -301,7 +320,8 @@ class PopupMenu:
             return
 
         widgets = (
-            [row, icon_slot, label]
+            [row, label]
+            + ([icon_slot] if icon_slot else [])
             + ([icon_label] if icon_label else [])
             + ([arrow] if arrow else [])
             + ([toggle_label] if toggle_label else [])
