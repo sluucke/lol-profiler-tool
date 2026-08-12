@@ -251,9 +251,16 @@ class PopupMenu:
             self.close_all()
 
     def close_all(self) -> None:
+        # Guarded against a real race: a click dispatch and a focus-loss
+        # auto-close (from this level or another one sharing the same
+        # chain) can both try to tear the chain down at nearly the same
+        # moment.
         for window in list(self._chain):
             if window.winfo_exists():
-                window.destroy()
+                try:
+                    window.destroy()
+                except tk.TclError:
+                    pass
         self._chain.clear()
 
 
