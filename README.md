@@ -7,6 +7,9 @@ chat, a lobby reveal shortcut, and self-update via GitHub Releases.
 
 ## Features
 
+- **Custom tray menu** — the tray icon's menu is fully custom-styled
+  (dark theme, icons, hextech-gold accents) instead of the plain native
+  Windows menu, opened by either left- or right-click.
 - **Automatic status message** — keeps your LoL status message in sync with
   `message.txt`. Edit the file, the client updates on its own on the next
   cycle (every 5s), no need to reopen anything.
