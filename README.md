@@ -1,9 +1,9 @@
-# LoL Status Updater
+# LoL Profiler Tool
 
-A Windows system tray app that keeps your League of Legends status message
+A Windows system tray app for League of Legends: keeps your status message
 synced with a local text file, with automatic detection of the game
 installation, a visual status indicator, a cosmetic rank override shown in
-chat, and self-update via GitHub Releases.
+chat, a lobby reveal shortcut, and self-update via GitHub Releases.
 
 ## Features
 
@@ -21,6 +21,11 @@ chat, and self-update via GitHub Releases.
   the client's chat/hover card. **This is purely visual** — it does not
   change your actual matchmaking rank or any Riot-side data, it's the same
   field your friends see on your profile card.
+- **Lobby Reveal** — opens [Porofessor](https://porofessor.gg) with your
+  current champion-select lobby's summoner names, so you can check everyone's
+  ranked stats before the game starts. Trigger it manually from the tray menu,
+  or enable **Auto Lobby Reveal** to have it open automatically the moment
+  champ select starts.
 - **File logging** — option to record everything (folder detection, client
   connection, message/rank updates, errors) to `logs.txt`, timestamped.
 - **Start with Windows** — toggle autostart from the tray menu.
@@ -38,7 +43,7 @@ Runs in the background in the system tray, checking every 5 seconds:
    (`PUT /lol-chat/v1/me`) whatever changed.
 
 App data (`message.txt`, `config.json`, `logs.txt`) always lives in
-`%TEMP%\LoLStatusUpdater`, regardless of where the `.exe` is run from — no
+`%TEMP%\LoLProfilerTool`, regardless of where the `.exe` is run from — no
 need to keep files next to the executable.
 
 ## Usage
@@ -62,10 +67,10 @@ python main.py
 
 ```bash
 pip install pyinstaller
-pyinstaller --noconfirm LoLStatusUpdater.spec
+pyinstaller --noconfirm LoLProfilerTool.spec
 ```
 
-The executable is produced at `dist/LoLStatusUpdater.exe` — a single file
+The executable is produced at `dist/LoLProfilerTool.exe` — a single file
 with no external dependencies.
 
 ## Publishing a new version
@@ -74,6 +79,6 @@ with no external dependencies.
    match the tag you're about to create (e.g. `1.1.0` → tag `v1.1.0`).
 2. Build the `.exe` (command above).
 3. Create a tag and a GitHub release with that tag, attaching the generated
-   `LoLStatusUpdater.exe` as an asset.
+   `LoLProfilerTool.exe` as an asset.
 4. Anyone running an older version gets notified automatically and can
    install the update with one click from the tray menu.

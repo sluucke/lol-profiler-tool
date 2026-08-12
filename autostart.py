@@ -5,7 +5,7 @@ from pathlib import Path
 
 import winreg
 
-APP_NAME = "LoLStatusUpdater"
+APP_NAME = "LoLProfilerTool"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 

@@ -15,9 +15,9 @@ from pathlib import Path
 
 import requests
 
-logger = logging.getLogger("lol-status-updater")
+logger = logging.getLogger("lol-profiler-tool")
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 GITHUB_REPO = "sluucke/lol-profiler-tool"
 
 _RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -50,10 +50,10 @@ def check_for_update(timeout: float = 5.0) -> UpdateInfo | None:
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as exc:
-        logger.warning("Falha ao verificar atualizações: %s", exc)
+        logger.warning("Failed to check for updates: %s", exc)
         return None
     except ValueError as exc:
-        logger.warning("Resposta inválida da API do GitHub ao verificar atualizações: %s", exc)
+        logger.warning("Invalid response from the GitHub API while checking for updates: %s", exc)
         return None
 
     latest_tag = data.get("tag_name") or ""
@@ -64,7 +64,7 @@ def check_for_update(timeout: float = 5.0) -> UpdateInfo | None:
         (a for a in data.get("assets", []) if a.get("name", "").lower().endswith(".exe")), None
     )
     if asset is None:
-        logger.warning("Release %s não tem um .exe anexado — pulando.", latest_tag)
+        logger.warning("Release %s has no .exe asset attached — skipping.", latest_tag)
         return None
 
     return UpdateInfo(version=latest_tag, download_url=asset["browser_download_url"], notes=data.get("body") or "")
@@ -76,11 +76,11 @@ def download_and_apply_update(info: UpdateInfo) -> None:
     and relaunches it. Caller must exit the process right after this returns
     (e.g. stop the tray icon) so the helper script can complete the swap."""
     if not getattr(sys, "frozen", False):
-        raise RuntimeError("Auto-update só funciona no .exe compilado, não rodando via python main.py.")
+        raise RuntimeError("Auto-update only works in the compiled .exe, not when running via python main.py.")
 
     current_exe = Path(sys.executable).resolve()
     tmp_dir = Path(tempfile.gettempdir())
-    downloaded = tmp_dir / "LoLStatusUpdater_update.exe"
+    downloaded = tmp_dir / "LoLProfilerTool_update.exe"
 
     with requests.get(info.download_url, stream=True, timeout=60) as response:
         response.raise_for_status()
@@ -90,7 +90,7 @@ def download_and_apply_update(info: UpdateInfo) -> None:
 
     # `move` fails while current_exe is still locked by this running process;
     # retry for up to a minute rather than tracking the PID directly.
-    script = tmp_dir / "LoLStatusUpdater_apply_update.bat"
+    script = tmp_dir / "LoLProfilerTool_apply_update.bat"
     script.write_text(
         "@echo off\r\n"
         "set count=0\r\n"
@@ -113,4 +113,4 @@ def download_and_apply_update(info: UpdateInfo) -> None:
         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
         close_fds=True,
     )
-    logger.info("Atualização %s baixada; reiniciando para aplicar.", info.version)
+    logger.info("Update %s downloaded; restarting to apply it.", info.version)

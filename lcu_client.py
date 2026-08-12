@@ -97,3 +97,24 @@ class LCUClient:
             "rankedLeagueQueue": queue,
         }
         self._request("PUT", creds, "/lol-chat/v1/me", json={"lol": updated})
+
+    def get_gameflow_phase(self, creds: LCUCredentials) -> str:
+        response = self._request("GET", creds, "/lol-gameflow/v1/gameflow-phase")
+        return response.json()
+
+    def get_champ_select_session(self, creds: LCUCredentials) -> dict | None:
+        """Returns the current champion-select session, or None when not
+        currently in champ select (the endpoint 404s in that case)."""
+        try:
+            response = self._request("GET", creds, "/lol-champ-select/v1/session")
+        except LCUError:
+            return None
+        return response.json()
+
+    def get_summoner_by_id(self, creds: LCUCredentials, summoner_id: int) -> dict:
+        response = self._request("GET", creds, f"/lol-summoner/v1/summoners/{summoner_id}")
+        return response.json()
+
+    def get_region(self, creds: LCUCredentials) -> str:
+        response = self._request("GET", creds, "/riotclient/region-locale")
+        return response.json().get("webRegion", "")

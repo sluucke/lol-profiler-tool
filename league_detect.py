@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 
-logger = logging.getLogger("lol-status-updater")
+logger = logging.getLogger("lol-profiler-tool")
 
 # Written by the Riot Client installer to ProgramData — this location itself is fixed
 # by Windows even when the games/client are installed on another drive or folder.
@@ -34,10 +34,10 @@ def auto_detect_install_dir() -> Path | None:
     try:
         data = json.loads(RIOT_INSTALLS_FILE.read_text(encoding="utf-8"))
     except OSError as exc:
-        _log_once(("os_error", str(exc)), logging.WARNING, "Não consegui ler %s: %s", RIOT_INSTALLS_FILE, exc)
+        _log_once(("os_error", str(exc)), logging.WARNING, "Couldn't read %s: %s", RIOT_INSTALLS_FILE, exc)
         return None
     except ValueError as exc:
-        _log_once(("value_error", str(exc)), logging.WARNING, "RiotClientInstalls.json em formato inválido: %s", exc)
+        _log_once(("value_error", str(exc)), logging.WARNING, "RiotClientInstalls.json has invalid format: %s", exc)
         return None
 
     live_root = data.get("patchlines", {}).get("live", {}).get("product_install_root")
@@ -45,7 +45,7 @@ def auto_detect_install_dir() -> Path | None:
         path = Path(live_root)
         if path.exists():
             _log_once(
-                ("live", str(path)), logging.INFO, "Pasta do LoL detectada via patchlines.live: %s", path
+                ("live", str(path)), logging.INFO, "LoL folder detected via patchlines.live: %s", path
             )
             return path
 
@@ -55,7 +55,7 @@ def auto_detect_install_dir() -> Path | None:
             _log_once(
                 ("associated_client", str(path)),
                 logging.INFO,
-                "Pasta do LoL detectada via associated_client: %s",
+                "LoL folder detected via associated_client: %s",
                 path,
             )
             return path
@@ -63,6 +63,6 @@ def auto_detect_install_dir() -> Path | None:
     _log_once(
         ("not_found", None),
         logging.WARNING,
-        "RiotClientInstalls.json lido, mas nenhuma pasta com LeagueClient.exe foi encontrada.",
+        "RiotClientInstalls.json was read, but no folder with LeagueClient.exe was found.",
     )
     return None

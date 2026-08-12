@@ -9,7 +9,7 @@ __pycache__/
 build/
 dist/
 
-# Runtime data (now lives in %TEMP%\LoLStatusUpdater, but ignore stale
+# Runtime data (now lives in %TEMP%\LoLProfilerTool, but ignore stale
 # copies from before that change / accidental local runs from source)
 config.json
 logs.txt

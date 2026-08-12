@@ -33,6 +33,16 @@ def set_league_dir_override(path: Path) -> None:
     _save(data)
 
 
+def get_status_message_enabled() -> bool:
+    return bool(_load().get("status_message_enabled", True))
+
+
+def set_status_message_enabled(enabled: bool) -> None:
+    data = _load()
+    data["status_message_enabled"] = enabled
+    _save(data)
+
+
 def get_logs_enabled() -> bool:
     return bool(_load().get("logs_enabled", False))
 
@@ -65,4 +75,14 @@ def get_rank_override() -> dict:
 def set_rank_override(tier: str, division: str, queue: str) -> None:
     data = _load()
     data["rank_override"] = {"tier": tier, "division": division, "queue": queue}
+    _save(data)
+
+
+def get_auto_lobby_reveal_enabled() -> bool:
+    return bool(_load().get("auto_lobby_reveal_enabled", False))
+
+
+def set_auto_lobby_reveal_enabled(enabled: bool) -> None:
+    data = _load()
+    data["auto_lobby_reveal_enabled"] = enabled
     _save(data)
