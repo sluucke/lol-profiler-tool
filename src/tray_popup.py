@@ -100,6 +100,58 @@ def _flyout_x(parent_x: int, parent_width: int, submenu_width: int, screen_width
     return x
 
 
+def _new_flyout_window(parent_tk: tk.Misc, chain: list[tk.Toplevel]) -> tuple[tk.Toplevel, tk.Frame]:
+    """Creates the borderless, always-on-top, initially-transparent window
+    (plus its themed body frame) shared by every flyout level — the root
+    popup and any depth of nested submenu — and registers it in `chain` so
+    close_all() can tear the whole tree down from any level."""
+    win = tk.Toplevel(parent_tk)
+    chain.append(win)
+    win.overrideredirect(True)
+    win.attributes("-topmost", True)
+    win.attributes("-alpha", 0.0)
+    win.configure(bg=BORDER_COLOR)
+
+    outer = tk.Frame(win, bg=BORDER_COLOR, padx=1, pady=1)
+    outer.pack(fill="both", expand=True)
+    body = tk.Frame(outer, bg=BG_COLOR)
+    body.pack(fill="both", expand=True)
+    return win, body
+
+
+def _fade_in(window: tk.Toplevel, step: int) -> None:
+    if not window.winfo_exists():
+        return
+    alpha = min(1.0, (step + 1) / FADE_STEPS)
+    window.attributes("-alpha", alpha)
+    if step + 1 < FADE_STEPS:
+        window.after(FADE_INTERVAL_MS, _fade_in, window, step + 1)
+
+
+def _clamp_to_screen(window: tk.Toplevel) -> None:
+    window.update_idletasks()
+    screen_w = window.winfo_screenwidth()
+    screen_h = window.winfo_screenheight()
+    x, y = window.winfo_x(), window.winfo_y()
+    w, h = window.winfo_width(), window.winfo_height()
+    x = min(x, screen_w - w - 4)
+    y = min(y, screen_h - h - 4)
+    window.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+
+def _watch_focus_out(window: tk.Toplevel, chain: list[tk.Toplevel], on_close) -> None:
+    """Closes the popup tree once focus lands outside every window sharing
+    `chain` — the same "click/tab away closes the menu" behavior every
+    flyout level already has."""
+    def check() -> None:
+        if not window.winfo_exists():
+            return
+        focused = window.focus_get()
+        if focused is None or focused.winfo_toplevel() not in chain:
+            on_close()
+    window.bind("<FocusOut>", lambda _e: window.after(60, check))
+
+
 class PopupMenu:
     """A single popup window: the root menu, or one flyout level."""
 
@@ -144,18 +196,8 @@ class PopupMenu:
 
         is_root = header is not None
 
-        self.window = tk.Toplevel(parent_tk)
-        self._chain.append(self.window)
+        self.window, self._body = _new_flyout_window(parent_tk, self._chain)
         win = self.window
-        win.overrideredirect(True)
-        win.attributes("-topmost", True)
-        win.attributes("-alpha", 0.0)
-        win.configure(bg=BORDER_COLOR)
-
-        outer = tk.Frame(win, bg=BORDER_COLOR, padx=1, pady=1)
-        outer.pack(fill="both", expand=True)
-        self._body = tk.Frame(outer, bg=BG_COLOR)
-        self._body.pack(fill="both", expand=True)
         # No pack_propagate(False) here: it would freeze *both* dimensions
         # at whatever the frame's size happened to be before any row
         # widgets exist (i.e. collapsed to ~0). Each row below locks its
@@ -178,33 +220,14 @@ class PopupMenu:
         win.update_idletasks()
         placed_y = y - win.winfo_reqheight() if is_root else y
         win.geometry(f"+{x}+{placed_y}")
-        self._clamp_to_screen()
+        _clamp_to_screen(win)
 
         win.bind("<Escape>", lambda _e: self.close_all())
-        win.bind("<FocusOut>", self._on_focus_out)
+        _watch_focus_out(win, self._chain, self.close_all)
 
         win.deiconify()
         win.focus_force()
-        self._fade_in(0)
-
-    def _clamp_to_screen(self) -> None:
-        win = self.window
-        win.update_idletasks()
-        screen_w = win.winfo_screenwidth()
-        screen_h = win.winfo_screenheight()
-        x, y = win.winfo_x(), win.winfo_y()
-        w, h = win.winfo_width(), win.winfo_height()
-        x = min(x, screen_w - w - 4)
-        y = min(y, screen_h - h - 4)
-        win.geometry(f"+{max(0, x)}+{max(0, y)}")
-
-    def _fade_in(self, step: int) -> None:
-        if not self.window.winfo_exists():
-            return
-        alpha = min(1.0, (step + 1) / FADE_STEPS)
-        self.window.attributes("-alpha", alpha)
-        if step + 1 < FADE_STEPS:
-            self.window.after(FADE_INTERVAL_MS, self._fade_in, step + 1)
+        _fade_in(win, 0)
 
     def _refresh(self) -> None:
         """Rebuilds this level's rows in place — used after a toggle/radio
@@ -468,19 +491,6 @@ class PopupMenu:
             parent=self,
         )
         self._flyout_item = item
-
-    def _on_focus_out(self, _event: object) -> None:
-        self.window.after(60, self._check_focus_after_out)
-
-    def _check_focus_after_out(self) -> None:
-        if not self.window.winfo_exists():
-            return
-        focused = self.window.focus_get()
-        if focused is None:
-            self.close_all()
-            return
-        if focused.winfo_toplevel() not in self._chain:
-            self.close_all()
 
     def close_all(self) -> None:
         # Guarded against a real race: a click dispatch and a focus-loss
