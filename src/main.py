@@ -25,9 +25,13 @@ POLL_INTERVAL_SECONDS = 5
 UPDATE_CHECK_INTERVAL_SECONDS = 3600
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 
-# When frozen by PyInstaller, bundled data files are extracted to sys._MEIPASS
-# instead of living next to this script.
-_ASSETS_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "assets"
+# When frozen by PyInstaller, bundled data files are extracted to
+# sys._MEIPASS. When running from source, assets/ lives at the repo root,
+# one level up from this file (src/main.py).
+if getattr(sys, "_MEIPASS", None):
+    _ASSETS_DIR = Path(sys._MEIPASS) / "assets"
+else:
+    _ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 BASE_ICON_PATH = _ASSETS_DIR / "icon-1.png"
 
 # Status badge colors drawn over the tray icon.

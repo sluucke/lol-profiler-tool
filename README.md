@@ -73,7 +73,7 @@ Requires Windows and Python 3.14+.
 
 ```bash
 pip install -r requirements.txt
-python main.py
+python src/main.py
 ```
 
 ## Building the `.exe`
