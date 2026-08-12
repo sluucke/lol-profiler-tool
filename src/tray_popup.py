@@ -26,6 +26,7 @@ BG_COLOR = "#1a1a20"
 BORDER_COLOR = "#2e2e38"
 GOLD = "#c89b3c"
 HOVER_BG = "#332d1c"
+SELECTED_BG = "#1e4d34"
 TEXT_COLOR = "#cccccc"
 DIM_TEXT_COLOR = "#777777"
 
@@ -105,16 +106,22 @@ class PopupMenu:
         header: tuple[str, str, Path, str] | None = None,
         chain: list[tk.Toplevel] | None = None,
         width: int = POPUP_WIDTH,
+        parent: "PopupMenu | None" = None,
     ):
         """`header`, when given, is (app_name, version_text, avatar_path,
         github_url) and is only rendered for the root popup. `chain` is the
         shared list of every open Toplevel in this popup tree (root plus
         any open flyouts) — passing the same list down lets any level
-        close the whole tree via close_all()."""
+        close the whole tree via close_all(). `parent` is the level that
+        opened this one as a flyout (None for the root) — used to bubble
+        refreshes up (e.g. a tier pick can change whether an *ancestor*
+        level's Division entry should be enabled) and to keep a flyout
+        open while the user is interacting with it."""
         self._pystray_icon = pystray_icon
         self._menu = menu
         self._header_args = header
         self._width = width
+        self._parent = parent
         self._chain = chain if chain is not None else []
         self._flyout: PopupMenu | None = None
         self._flyout_item: pystray.MenuItem | None = None
@@ -193,6 +200,18 @@ class PopupMenu:
             self._build_row(item, self._width)
         self.window.update_idletasks()
 
+    def _refresh_chain(self) -> None:
+        """Refreshes this level *and* every ancestor level still open above
+        it. Needed because a pick made in a nested flyout (e.g. a rank
+        tier, several levels deep) can change how an ancestor level should
+        render (e.g. the parent's Division entry becoming enabled/disabled)
+        — without walking up, that ancestor's row would stay stale until
+        something *at that level* happened to trigger its own refresh."""
+        node: PopupMenu | None = self
+        while node is not None:
+            node._refresh()
+            node = node._parent
+
     def _build_header(self, name: str, version: str, avatar_path: Path, github_url: str) -> None:
         row = tk.Frame(self._body, bg=BG_COLOR, cursor="hand2")
         row.pack(fill="x", padx=4, pady=(6, 2))
@@ -229,14 +248,15 @@ class PopupMenu:
 
         enabled = item.enabled
         raw_text = item.text
-        # Radio-style choices (e.g. the Rank/Division picks) get a check
-        # mark — there can be several in a list, so a switch per row would
-        # look like a wall of toggles. A plain on/off item gets an actual
-        # toggle-switch graphic instead of a text mark.
+        # Radio-style choices (e.g. the Rank/Division picks) get a solid
+        # green row background instead of a check mark. A plain on/off
+        # item gets an actual toggle-switch graphic instead.
         is_toggle = item.checked is not None and not item.radio
-        text = f"✓ {raw_text}" if (item.checked and not is_toggle) else raw_text
+        is_selected = bool(item.checked) and item.radio
+        text = raw_text
+        default_bg = SELECTED_BG if is_selected else BG_COLOR
 
-        row = tk.Frame(self._body, bg=BG_COLOR, height=ROW_HEIGHT, width=width - 8)
+        row = tk.Frame(self._body, bg=default_bg, height=ROW_HEIGHT, width=width - 8)
         row.pack(fill="x", padx=4, pady=1)
         row.pack_propagate(False)
 
@@ -246,14 +266,14 @@ class PopupMenu:
         # label has an image — a Frame's `width` is always pixels, so it's
         # the reliable way to reserve a fixed-size slot regardless of
         # whether this row actually has an icon.
-        icon_slot = tk.Frame(row, bg=BG_COLOR, width=ICON_SLOT_WIDTH, height=ROW_HEIGHT)
+        icon_slot = tk.Frame(row, bg=default_bg, width=ICON_SLOT_WIDTH, height=ROW_HEIGHT)
         icon_slot.pack(side="left")
         icon_slot.pack_propagate(False)
         icon_label = None
         icon_photo = _icon_photo_for(raw_text, self.window) or _rank_icon_photo_for(raw_text, self.window)
         if icon_photo is not None:
             self._row_images.append(icon_photo)
-            icon_label = tk.Label(icon_slot, image=icon_photo, bg=BG_COLOR)
+            icon_label = tk.Label(icon_slot, image=icon_photo, bg=default_bg)
             icon_label.place(relx=0.5, rely=0.5, anchor="center")
 
         # Whatever goes on the right (submenu arrow, or a toggle switch)
@@ -263,16 +283,16 @@ class PopupMenu:
         arrow = None
         toggle_label = None
         if item.submenu is not None:
-            arrow = tk.Label(row, text="▸", bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
+            arrow = tk.Label(row, text="▸", bg=default_bg, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
             arrow.pack(side="right", padx=(0, ROW_PAD_X))
         elif is_toggle:
             toggle_photo = _toggle_photo_for(bool(item.checked), self.window)
             self._row_images.append(toggle_photo)
-            toggle_label = tk.Label(row, image=toggle_photo, bg=BG_COLOR)
+            toggle_label = tk.Label(row, image=toggle_photo, bg=default_bg)
             toggle_label.pack(side="right", padx=(0, ROW_PAD_X))
 
         label = tk.Label(
-            row, text=text, bg=BG_COLOR, fg=fg, anchor="w",
+            row, text=text, bg=default_bg, fg=fg, anchor="w",
             font=("Segoe UI", 9),
         )
         label.pack(side="left", fill="both", expand=True, padx=(0, ROW_PAD_X))
@@ -288,16 +308,22 @@ class PopupMenu:
         )
 
         def on_enter(_event: object) -> None:
+            # Tell the flyout that opened *this* level "I'm still in use"
+            # so its own pending auto-close (see _schedule_flyout_close)
+            # doesn't fire out from under an interaction happening inside
+            # it — any hover anywhere in a flyout counts as "still in use".
+            if self._parent is not None:
+                self._parent._cancel_flyout(keep_pending=True)
             for w in widgets:
                 w.configure(bg=HOVER_BG)
             if item.submenu is not None:
                 self._schedule_flyout(item, row)
             else:
-                self._cancel_flyout()
+                self._schedule_flyout_close()
 
         def on_leave(_event: object) -> None:
             for w in widgets:
-                w.configure(bg=BG_COLOR)
+                w.configure(bg=default_bg)
 
         def on_click(_event: object) -> None:
             if item.submenu is not None:
@@ -307,8 +333,11 @@ class PopupMenu:
                 # Toggle/radio picks stay open and refresh in place, so the
                 # new state is visible right away — closing the whole menu
                 # on every checkbox click would make it tedious to flip a
-                # few settings in a row.
-                self._refresh()
+                # few settings in a row. Refreshing the whole chain (not
+                # just this level) matters when a pick here changes how an
+                # ancestor level should render, e.g. a rank tier pick
+                # enabling/disabling the parent's Division entry.
+                self._refresh_chain()
             else:
                 self.close_all()
 
@@ -333,6 +362,26 @@ class PopupMenu:
         self._flyout_after_id = self.window.after(
             FLYOUT_DELAY_MS, lambda: self._open_flyout(item, row)
         )
+
+    def _schedule_flyout_close(self) -> None:
+        # Hovering a row *without* a submenu used to close any open flyout
+        # immediately — but the row directly above/below a submenu item is
+        # easy to clip for an instant while moving the mouse diagonally
+        # toward the flyout itself, which made it slam shut. Debouncing
+        # this the same way opening is debounced fixes that: a brief clip
+        # doesn't close anything, and on_enter's parent-notification (see
+        # _build_row) cancels this once the mouse actually reaches the
+        # flyout.
+        if self._flyout_after_id is not None:
+            self.window.after_cancel(self._flyout_after_id)
+        self._flyout_after_id = self.window.after(FLYOUT_DELAY_MS, self._close_flyout_now)
+
+    def _close_flyout_now(self) -> None:
+        self._flyout_after_id = None
+        if self._flyout is not None:
+            self._flyout.window.destroy()
+            self._flyout = None
+            self._flyout_item = None
 
     def _cancel_flyout(self, *, keep_pending: bool = False) -> None:
         if self._flyout_after_id is not None:
@@ -364,6 +413,7 @@ class PopupMenu:
             abs_y,
             chain=self._chain,
             width=SUBMENU_WIDTH,
+            parent=self,
         )
         self._flyout_item = item
 
