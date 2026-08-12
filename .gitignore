@@ -14,3 +14,6 @@ dist/
 config.json
 logs.txt
 message.txt
+
+# Brainstorming session mockups
+.superpowers/
