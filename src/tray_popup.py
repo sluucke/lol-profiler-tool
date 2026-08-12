@@ -40,6 +40,16 @@ FLYOUT_DELAY_MS = 180
 FADE_STEPS = 8
 FADE_INTERVAL_MS = 15
 
+# A sentinel Menu instance: giving a MenuItem this exact object as its
+# submenu makes pystray treat it as a real submenu (MenuItem.submenu is
+# `action if isinstance(action, pystray.Menu) else None`), so it opens like
+# any other flyout — but PopupMenu._open_flyout checks for this object by
+# identity and opens a SearchFlyout instead of rendering it as a normal
+# (empty) menu.
+BANNER_SEARCH_MARKER = pystray.Menu()
+
+MAX_SEARCH_RESULTS = 8
+
 # Populated lazily on first use (needs a live Tk root for PIL<->Tk image
 # conversion), then reused for every popup/flyout for the rest of the
 # app's life.
@@ -168,6 +178,8 @@ class PopupMenu:
         chain: list[tk.Toplevel] | None = None,
         width: int = POPUP_WIDTH,
         parent: "PopupMenu | None" = None,
+        banner_search_fn: "Callable[[str], list[str]] | None" = None,
+        banner_skin_menu_fn: "Callable[[str], pystray.Menu] | None" = None,
     ):
         """`header`, when given, is (app_name, version_text, avatar_path,
         github_url) and is only rendered for the root popup. `on_quit`, also
@@ -185,6 +197,8 @@ class PopupMenu:
         self._menu = menu
         self._header_args = header
         self._on_quit = on_quit
+        self._banner_search_fn = banner_search_fn
+        self._banner_skin_menu_fn = banner_skin_menu_fn
         self._width = width
         self._parent = parent
         self._chain = chain if chain is not None else []
@@ -480,16 +494,30 @@ class PopupMenu:
         abs_x = _flyout_x(self.window.winfo_x(), self.window.winfo_width(), SUBMENU_WIDTH, screen_w)
         abs_y = row.winfo_rooty()
 
-        self._flyout = PopupMenu(
-            self.window,
-            self._pystray_icon,
-            item.submenu,
-            abs_x,
-            abs_y,
-            chain=self._chain,
-            width=SUBMENU_WIDTH,
-            parent=self,
-        )
+        if item.submenu is BANNER_SEARCH_MARKER:
+            self._flyout = SearchFlyout(
+                self.window,
+                self._pystray_icon,
+                abs_x,
+                abs_y,
+                search_fn=self._banner_search_fn,
+                skin_menu_fn=self._banner_skin_menu_fn,
+                chain=self._chain,
+                parent=self,
+            )
+        else:
+            self._flyout = PopupMenu(
+                self.window,
+                self._pystray_icon,
+                item.submenu,
+                abs_x,
+                abs_y,
+                chain=self._chain,
+                width=SUBMENU_WIDTH,
+                parent=self,
+                banner_search_fn=self._banner_search_fn,
+                banner_skin_menu_fn=self._banner_skin_menu_fn,
+            )
         self._flyout_item = item
 
     def close_all(self) -> None:
@@ -506,6 +534,160 @@ class PopupMenu:
         self._chain.clear()
 
 
+class SearchFlyout:
+    """A flyout that shows a live-filtered champion list instead of a
+    static pystray.Menu tree. Opened by PopupMenu._open_flyout in place of
+    an ordinary PopupMenu when the hovered item's submenu is
+    BANNER_SEARCH_MARKER. Selecting a champion opens a normal PopupMenu (via
+    `skin_menu_fn`) for that champion's skins — only the champion-search
+    level needed new UI code; the skin level reuses PopupMenu unchanged."""
+
+    WIDTH = 220
+
+    def __init__(
+        self,
+        parent_tk: tk.Misc,
+        pystray_icon: pystray.Icon,
+        x: int,
+        y: int,
+        *,
+        search_fn: "Callable[[str], list[str]]",
+        skin_menu_fn: "Callable[[str], pystray.Menu]",
+        chain: list[tk.Toplevel],
+        parent: "PopupMenu",
+    ):
+        self._pystray_icon = pystray_icon
+        self._search_fn = search_fn
+        self._skin_menu_fn = skin_menu_fn
+        self._chain = chain
+        self._parent = parent
+
+        self._flyout: PopupMenu | None = None
+        self._flyout_item: str | None = None
+        self._flyout_after_id: str | None = None
+        self._row_widgets: list[tk.Widget] = []
+
+        self.window, self._body = _new_flyout_window(parent_tk, self._chain)
+        win = self.window
+
+        self._entry_var = tk.StringVar()
+        entry = tk.Entry(
+            self._body, textvariable=self._entry_var,
+            bg="#242430", fg=TEXT_COLOR, insertbackground=GOLD,
+            relief="flat", font=("Segoe UI", 9),
+            highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=GOLD,
+        )
+        entry.pack(fill="x", padx=8, pady=(8, 6), ipady=4)
+        entry.bind("<KeyRelease>", lambda _e: self._render_results())
+
+        self._results_body = tk.Frame(self._body, bg=BG_COLOR, width=self.WIDTH)
+        self._results_body.pack(fill="both", expand=True, padx=4, pady=(0, 6))
+
+        self._render_results()
+
+        win.update_idletasks()
+        win.geometry(f"+{x}+{y}")
+        _clamp_to_screen(win)
+
+        win.bind("<Escape>", lambda _e: self._parent.close_all())
+        _watch_focus_out(win, self._chain, self._parent.close_all)
+
+        win.deiconify()
+        entry.focus_force()
+        _fade_in(win, 0)
+
+    def _render_results(self) -> None:
+        for widget in list(self._results_body.winfo_children()):
+            widget.destroy()
+        self._row_widgets.clear()
+        self._cancel_flyout()
+
+        query = self._entry_var.get()
+        results = self._search_fn(query)[:MAX_SEARCH_RESULTS]
+
+        if not results:
+            placeholder = "Type to search a champion" if not query.strip() else "No matches"
+            tk.Label(
+                self._results_body, text=placeholder, bg=BG_COLOR, fg=DIM_TEXT_COLOR,
+                font=("Segoe UI", 9), anchor="w",
+            ).pack(fill="x", padx=8, pady=8)
+            return
+
+        for name in results:
+            self._build_result_row(name)
+
+    def _build_result_row(self, champion: str) -> None:
+        row = tk.Frame(self._results_body, bg=BG_COLOR, height=ROW_HEIGHT, width=self.WIDTH - 8)
+        row.pack(fill="x", padx=4, pady=1)
+        row.pack_propagate(False)
+
+        label = tk.Label(row, text=champion, bg=BG_COLOR, fg=TEXT_COLOR, anchor="w", font=("Segoe UI", 9))
+        label.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        arrow = tk.Label(row, text="▸", bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 9))
+        arrow.pack(side="right", padx=(0, ROW_PAD_X))
+
+        widgets = [row, label, arrow]
+        self._row_widgets.extend(widgets)
+
+        def on_enter(_event: object) -> None:
+            for w in widgets:
+                w.configure(bg=HOVER_BG)
+            self._schedule_flyout(champion, row)
+
+        def on_leave(_event: object) -> None:
+            for w in widgets:
+                w.configure(bg=BG_COLOR)
+
+        for w in widgets:
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+
+    def _schedule_flyout(self, champion: str, row: tk.Frame) -> None:
+        if self._flyout is not None and self._flyout_item == champion:
+            if self._flyout_after_id is not None:
+                self.window.after_cancel(self._flyout_after_id)
+                self._flyout_after_id = None
+            return
+        self._cancel_flyout(keep_pending=True)
+        self._flyout_after_id = self.window.after(
+            FLYOUT_DELAY_MS, lambda: self._open_flyout(champion, row)
+        )
+
+    def _cancel_flyout(self, *, keep_pending: bool = False) -> None:
+        if self._flyout_after_id is not None:
+            self.window.after_cancel(self._flyout_after_id)
+            self._flyout_after_id = None
+        if not keep_pending and self._flyout is not None:
+            self._flyout.window.destroy()
+            self._flyout = None
+            self._flyout_item = None
+
+    def _open_flyout(self, champion: str, row: tk.Frame) -> None:
+        if self._flyout is not None:
+            if self._flyout_item == champion:
+                return
+            self._flyout.window.destroy()
+            self._flyout = None
+            self._flyout_item = None
+
+        row.update_idletasks()
+        screen_w = self.window.winfo_screenwidth()
+        abs_x = _flyout_x(self.window.winfo_x(), self.window.winfo_width(), SUBMENU_WIDTH, screen_w)
+        abs_y = row.winfo_rooty()
+
+        self._flyout = PopupMenu(
+            self.window,
+            self._pystray_icon,
+            self._skin_menu_fn(champion),
+            abs_x,
+            abs_y,
+            chain=self._chain,
+            width=SUBMENU_WIDTH,
+            parent=self,
+        )
+        self._flyout_item = champion
+
+
 def show(
     parent_tk: tk.Misc,
     pystray_icon: pystray.Icon,
@@ -518,6 +700,8 @@ def show(
     avatar_path: Path,
     github_url: str,
     on_quit: "Callable[[pystray.Icon], None] | None" = None,
+    banner_search_fn: "Callable[[str], list[str]] | None" = None,
+    banner_skin_menu_fn: "Callable[[str], pystray.Menu] | None" = None,
 ) -> None:
     """Opens the popup so its bottom-left corner is at (x, y) — matching
     how a tray icon's context menu conventionally opens upward from the
@@ -530,4 +714,6 @@ def show(
         y,
         header=(app_name, f"v{app_version}", avatar_path, github_url),
         on_quit=on_quit,
+        banner_search_fn=banner_search_fn,
+        banner_skin_menu_fn=banner_skin_menu_fn,
     )
