@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk
 
 import autostart
 import auto_accept
@@ -18,11 +18,13 @@ import config
 import dodge as dodge_feature
 import lobby_reveal
 import riotid_changer
+import tray_icons
 import tray_popup
 import updater
 from lcu_client import LCUClient, LCUError, read_credentials
 from paths import LOG_FILE, MESSAGE_FILE, resolve_league_dir
 from tray_icon import TrayIcon
+from tray_popup import BG_COLOR, BORDER_COLOR, DIM_TEXT_COLOR, GOLD, HOVER_BG, TEXT_COLOR
 
 POLL_INTERVAL_SECONDS = 5
 UPDATE_CHECK_INTERVAL_SECONDS = 3600
@@ -410,25 +412,49 @@ def change_riot_id_menu(icon, item) -> None:
     threading.Thread(target=_change_riot_id_worker, args=(icon,), daemon=True).start()
 
 
+def _styled_entry(parent: tk.Widget) -> tk.Entry:
+    entry = tk.Entry(
+        parent,
+        bg="#242430", fg=TEXT_COLOR, insertbackground=GOLD,
+        relief="flat", font=("Segoe UI", 10),
+        highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=GOLD,
+    )
+    entry.pack(fill="x", ipady=6, pady=(4, 14))
+    return entry
+
+
 def _ask_riot_id(root: tk.Tk) -> tuple[str, str] | None:
     """A single form with both the name and tag fields, instead of two
-    sequential prompts."""
+    sequential prompts. Styled to match the tray popup (dark, gold accent)
+    since it's opened straight from it."""
     dialog = tk.Toplevel(root)
     dialog.title("Change Riot ID")
     dialog.resizable(False, False)
     dialog.attributes("-topmost", True)
+    dialog.configure(bg=BORDER_COLOR, padx=1, pady=1)
 
-    tk.Label(dialog, text=f"Riot Name (max {riotid_changer.MAX_NAME_LENGTH} characters):").grid(
-        row=0, column=0, sticky="w", padx=10, pady=(10, 0)
-    )
-    name_entry = tk.Entry(dialog, width=30)
-    name_entry.grid(row=1, column=0, padx=10, pady=(0, 10))
+    body = tk.Frame(dialog, bg=BG_COLOR, padx=20, pady=18)
+    body.pack(fill="both", expand=True)
 
-    tk.Label(dialog, text=f"Riot Tag (max {riotid_changer.MAX_TAG_LENGTH} characters, without #):").grid(
-        row=2, column=0, sticky="w", padx=10
-    )
-    tag_entry = tk.Entry(dialog, width=30)
-    tag_entry.grid(row=3, column=0, padx=10, pady=(0, 10))
+    header = tk.Frame(body, bg=BG_COLOR)
+    header.pack(fill="x", pady=(0, 14))
+    icon_photo = ImageTk.PhotoImage(tray_icons.riot_id_icon(24))
+    tk.Label(header, image=icon_photo, bg=BG_COLOR).pack(side="left", padx=(0, 10))
+    tk.Label(
+        header, text="Change Riot ID", bg=BG_COLOR, fg=GOLD, font=("Segoe UI", 11, "bold"),
+    ).pack(side="left")
+
+    tk.Label(
+        body, text=f"Riot Name (max {riotid_changer.MAX_NAME_LENGTH} characters)",
+        bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 8), anchor="w",
+    ).pack(fill="x")
+    name_entry = _styled_entry(body)
+
+    tk.Label(
+        body, text=f"Riot Tag (max {riotid_changer.MAX_TAG_LENGTH} characters, without #)",
+        bg=BG_COLOR, fg=DIM_TEXT_COLOR, font=("Segoe UI", 8), anchor="w",
+    ).pack(fill="x")
+    tag_entry = _styled_entry(body)
 
     result: dict[str, str] = {}
 
@@ -440,10 +466,23 @@ def _ask_riot_id(root: tk.Tk) -> tuple[str, str] | None:
     def on_cancel() -> None:
         dialog.destroy()
 
-    button_frame = tk.Frame(dialog)
-    button_frame.grid(row=4, column=0, pady=(0, 10))
-    tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side="left", padx=5)
-    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=5)
+    button_frame = tk.Frame(body, bg=BG_COLOR)
+    button_frame.pack(fill="x", pady=(4, 0))
+
+    cancel_btn = tk.Button(
+        button_frame, text="Cancel", command=on_cancel, width=10,
+        bg=BG_COLOR, fg=TEXT_COLOR, activebackground=HOVER_BG, activeforeground=TEXT_COLOR,
+        relief="flat", bd=0, highlightthickness=1, highlightbackground=BORDER_COLOR,
+        font=("Segoe UI", 9), cursor="hand2",
+    )
+    cancel_btn.pack(side="right")
+
+    ok_btn = tk.Button(
+        button_frame, text="OK", command=on_ok, width=10,
+        bg=GOLD, fg=BG_COLOR, activebackground="#ddb35a", activeforeground=BG_COLOR,
+        relief="flat", bd=0, font=("Segoe UI", 9, "bold"), cursor="hand2",
+    )
+    ok_btn.pack(side="right", padx=(0, 8))
 
     name_entry.focus_set()
     dialog.bind("<Return>", lambda _event: on_ok())
