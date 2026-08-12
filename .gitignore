@@ -15,5 +15,6 @@ config.json
 logs.txt
 message.txt
 
-# Brainstorming session mockups
+# Brainstorming session mockups and specs (local reference only)
 .superpowers/
+docs/superpowers/
