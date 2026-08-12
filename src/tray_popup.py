@@ -579,6 +579,7 @@ class SearchFlyout:
         )
         entry.pack(fill="x", padx=8, pady=(8, 6), ipady=4)
         entry.bind("<KeyRelease>", lambda _e: self._render_results())
+        entry.bind("<Enter>", lambda _e: self._parent._cancel_flyout(keep_pending=True))
 
         self._results_body = tk.Frame(self._body, bg=BG_COLOR, width=self.WIDTH)
         self._results_body.pack(fill="both", expand=True, padx=4, pady=(0, 6))
@@ -630,6 +631,7 @@ class SearchFlyout:
         self._row_widgets.extend(widgets)
 
         def on_enter(_event: object) -> None:
+            self._parent._cancel_flyout(keep_pending=True)
             for w in widgets:
                 w.configure(bg=HOVER_BG)
             self._schedule_flyout(champion, row)
