@@ -67,6 +67,10 @@ pub fn read_message() -> String {
         .to_string()
 }
 
+pub fn set_message(message: &str) -> std::io::Result<()> {
+    std::fs::write(message_path(), message)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,5 +107,16 @@ mod tests {
             league_dir_override_from(&config),
             Some(PathBuf::from(r"C:\Riot Games\League of Legends"))
         );
+    }
+
+    #[test]
+    fn set_message_then_read_message_round_trips() {
+        // Uses the real base_dir() (%TEMP%\LoLProfilerTool) — acceptable
+        // here since it's the same directory the real app uses, and this
+        // test only writes a value it also cleans up.
+        let original = read_message();
+        set_message("test round trip").unwrap();
+        assert_eq!(read_message(), "test round trip");
+        set_message(&original).unwrap();
     }
 }

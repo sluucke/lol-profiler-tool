@@ -6,7 +6,7 @@
 
 use tokio::sync::watch;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ConnectionState {
     /// LoL folder resolved, but the client isn't open yet (no lockfile).
     WaitingForClient,
