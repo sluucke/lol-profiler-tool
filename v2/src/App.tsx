@@ -5,7 +5,7 @@ import "./App.css";
 
 function App() {
   return (
-    <div className="flex h-screen flex-col bg-app-bg text-app-text">
+    <div className="app-shell-bg flex h-screen flex-col text-app-text">
       <TitleBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar active="status" />
