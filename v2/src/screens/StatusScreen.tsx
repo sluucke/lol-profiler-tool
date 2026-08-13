@@ -50,8 +50,13 @@ export function StatusScreen() {
   return (
     <div className="flex-1 overflow-auto p-6">
       <div className="mb-4 flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${STATE_COLOR[connectionState]}`} />
-        <span className="text-xs text-app-text">{STATE_LABEL[connectionState]}</span>
+        <span
+          className={`h-2.5 w-2.5 rotate-45 ${STATE_COLOR[connectionState]}`}
+          style={{ boxShadow: "0 0 8px currentColor" }}
+        />
+        <span className="font-display text-xs font-semibold tracking-[0.15em] text-app-text uppercase">
+          {STATE_LABEL[connectionState]}
+        </span>
       </div>
 
       <Card title="Status Message">
