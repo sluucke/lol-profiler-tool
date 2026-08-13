@@ -21,6 +21,7 @@ export function StatusScreen() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("WaitingForClient");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     invoke<ConnectionState>("get_connection_state").then(setConnectionState);
@@ -36,8 +37,11 @@ export function StatusScreen() {
 
   async function handleBlur() {
     setSaving(true);
+    setSaveError(null);
     try {
       await invoke("set_status_message", { message });
+    } catch (e) {
+      setSaveError(String(e));
     } finally {
       setSaving(false);
     }
@@ -56,10 +60,12 @@ export function StatusScreen() {
           onChange={(e) => setMessage(e.target.value)}
           onBlur={handleBlur}
           rows={4}
+          disabled={saving}
           placeholder="Your status message..."
-          className="w-full resize-y rounded border border-app-border bg-app-bg p-2 text-sm text-app-text outline-none focus:border-app-gold"
+          className="w-full resize-y rounded border border-app-border bg-app-bg p-2 text-sm text-app-text outline-none focus:border-app-gold disabled:opacity-60"
         />
         {saving && <div className="mt-1 text-[11px] text-app-text-dim">Saving…</div>}
+        {saveError && <div className="mt-1 text-[11px] text-state-error">Couldn't save: {saveError}</div>}
       </Card>
     </div>
   );
