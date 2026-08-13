@@ -21,6 +21,13 @@ pub async fn run(state: AppState) {
     loop {
         interval.tick().await;
 
+        // NOTE: league_path::resolve/lcu::read_credentials/settings::* all
+        // do small synchronous std::fs reads directly on this async task
+        // rather than via spawn_blocking or tokio::fs. For local files this
+        // size the real-world impact is negligible on a 5s poll, but if
+        // more filesystem-heavy polling gets layered on in a later phase,
+        // wrap these in tokio::task::spawn_blocking rather than letting the
+        // pattern spread further.
         let Some(league_dir) = league_path::resolve(settings::league_dir_override().as_deref()) else {
             state.set(ConnectionState::Error);
             continue;
