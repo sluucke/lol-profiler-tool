@@ -7,6 +7,7 @@ use tauri::{
 mod lcu;
 mod league_path;
 mod settings;
+mod state;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
