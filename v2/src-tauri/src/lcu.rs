@@ -4,9 +4,15 @@
 //! self-signed-HTTPS API with basic auth.
 
 use std::path::Path;
+use std::time::Duration;
 
 use reqwest::Client;
 use serde_json::json;
+
+/// Matches lcu_client.py's `timeout: float = 3.0` — this talks to a local
+/// process, but a wedged client can leave sockets half-open, and without a
+/// timeout an awaiting async task would block indefinitely.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone)]
 pub struct LcuCredentials {
@@ -53,6 +59,12 @@ impl LcuClient {
     pub fn new() -> Self {
         let http = Client::builder()
             .danger_accept_invalid_certs(true)
+            .timeout(REQUEST_TIMEOUT)
+            // Matches lcu_client.py's `session.trust_env = False`: without
+            // this, reqwest honors HTTP_PROXY/HTTPS_PROXY/NO_PROXY from the
+            // environment, which could route localhost LCU calls through a
+            // proxy that has no way to reach them.
+            .no_proxy()
             .build()
             .expect("failed to build reqwest client");
         Self { http }
