@@ -4,12 +4,44 @@
   --color-app-bg: #1a1a20;
   --color-app-surface: #151519;
   --color-app-border: #2e2e38;
-  --color-app-gold: #c89b3c;
   --color-app-text: #cccccc;
   --color-app-text-dim: #777777;
   --color-state-connected: #2ecc71;
   --color-state-waiting: #f1c40f;
   --color-state-error: #e74c3c;
+
+  --color-app-gold-highlight: #fff3d0;
+  --color-app-gold: #f0c674;
+  --color-app-gold-dark: #c89b3c;
+  --color-app-gold-shadow: #8a5a1a;
+  --color-app-bronze: #423828;
+
+  --font-display: "Cinzel", "Segoe UI", serif;
+}
+
+@font-face {
+  font-family: "Cinzel";
+  src: url("./assets/fonts/Cinzel-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cinzel";
+  src: url("./assets/fonts/Cinzel-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cinzel";
+  src: url("./assets/fonts/Cinzel-Black.ttf") format("truetype");
+  font-weight: 900;
+  font-display: swap;
+}
+
+.app-shell-bg {
+  background: radial-gradient(ellipse at top, var(--color-app-gold-shadow) 0%, var(--color-app-bg) 45%, #000000 100%);
 }
 
 html,
