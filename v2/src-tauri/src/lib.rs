@@ -41,7 +41,7 @@ pub fn run() {
                 use tauri_plugin_updater::UpdaterExt;
                 if let Ok(Some(update)) = handle.updater().unwrap().check().await {
                     let mut downloaded = 0;
-                    update
+                    let install_result = update
                         .download_and_install(
                             |chunk_length, _content_length| {
                                 downloaded += chunk_length;
@@ -49,9 +49,11 @@ pub fn run() {
                             },
                             || println!("download finished"),
                         )
-                        .await
-                        .unwrap();
-                    handle.restart();
+                        .await;
+                    match install_result {
+                        Ok(()) => handle.restart(),
+                        Err(e) => eprintln!("update install failed: {e}"),
+                    }
                 }
             });
 
