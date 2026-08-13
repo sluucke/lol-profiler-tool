@@ -13,7 +13,7 @@ function App() {
   }
 
   return (
-    <main className="container">
+    <main className="container bg-neutral-900 text-white p-8">
       <h1>Welcome to Tauri + React</h1>
 
       <div className="row">
