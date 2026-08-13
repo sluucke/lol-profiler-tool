@@ -6,11 +6,12 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-9 shrink-0 select-none items-center justify-between border-b border-app-border bg-app-surface"
+      className="flex h-9 shrink-0 select-none items-center justify-between border-b border-app-gold-dark bg-linear-to-b from-app-bronze/40 to-app-surface"
     >
       <div
         data-tauri-drag-region
-        className="flex flex-1 items-center gap-2 px-3 text-xs font-semibold tracking-wide text-app-gold"
+        className="flex flex-1 items-center gap-2 px-3 font-display text-xs font-bold tracking-widest text-app-gold"
+        style={{ textShadow: "0 0 8px rgba(240, 198, 116, 0.4)" }}
       >
         LoL Profiler Tool
       </div>
