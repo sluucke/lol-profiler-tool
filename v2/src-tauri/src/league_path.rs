@@ -43,6 +43,11 @@ pub fn auto_detect_install_dir() -> Option<PathBuf> {
 }
 
 fn parse_installs(content: &str) -> Option<PathBuf> {
+    // TODO(logging): the parse error is discarded here, so "manifest exists
+    // but is malformed" (Riot changed the schema again, or the file is
+    // corrupted) is currently indistinguishable from "not installed" even
+    // once a logging strategy exists elsewhere in the app — revisit this
+    // fn's return type then if that distinction turns out to matter.
     let data: RiotClientInstalls = serde_json::from_str(content).ok()?;
 
     if let Some(root) = data.patchlines.live.product_install_root {
@@ -103,5 +108,39 @@ mod tests {
     fn returns_none_when_no_strategy_matches() {
         let json = r#"{"patchlines": {}, "associated_client": {}}"#;
         assert_eq!(parse_installs(json), None);
+    }
+
+    #[test]
+    fn finds_path_via_associated_client_when_league_exe_present() {
+        let dir = std::env::temp_dir().join(format!("league_path_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("LeagueClient.exe"), b"").unwrap();
+
+        let json = format!(
+            r#"{{"patchlines": {{}}, "associated_client": {{ {:?}: {{}} }}}}"#,
+            dir.to_string_lossy()
+        );
+        let result = parse_installs(&json);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(result, Some(dir));
+    }
+
+    #[test]
+    fn resolve_prefers_existing_override_over_autodetect() {
+        let existing_dir = std::env::temp_dir();
+        assert_eq!(resolve(Some(&existing_dir)), Some(existing_dir));
+    }
+
+    #[test]
+    fn resolve_ignores_nonexistent_override() {
+        let bogus = PathBuf::from(r"Z:\definitely\does\not\exist\league");
+        assert_ne!(resolve(Some(&bogus)), Some(bogus));
+    }
+
+    #[test]
+    fn lockfile_path_joins_filename() {
+        let dir = PathBuf::from(r"C:\Riot Games\League of Legends");
+        assert_eq!(lockfile_path(&dir), dir.join("lockfile"));
     }
 }
