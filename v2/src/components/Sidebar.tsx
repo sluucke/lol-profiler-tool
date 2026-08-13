@@ -10,9 +10,12 @@ export function Sidebar({ active }: { active: Screen }) {
           key={item.id}
           title={item.label}
           className={
-            "flex h-9 w-9 items-center justify-center rounded-lg text-base " +
-            (item.id === active ? "bg-linear-to-br from-app-gold to-yellow-800 text-black" : "bg-app-bg text-app-text-dim")
+            "flex h-10 w-10 items-center justify-center text-base transition-shadow " +
+            (item.id === active
+              ? "bg-linear-to-br from-app-gold-highlight via-app-gold to-app-gold-shadow text-black shadow-[0_0_14px_rgba(240,198,116,0.55)]"
+              : "border border-app-bronze bg-app-bg text-app-text-dim")
           }
+          style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}
         >
           {item.icon}
         </div>
