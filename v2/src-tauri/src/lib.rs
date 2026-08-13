@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use tauri::WindowEvent;
+use tauri::{Manager, WindowEvent};
 
+mod commands;
 mod engine;
 mod lcu;
 mod league_path;
@@ -19,11 +20,17 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            commands::get_connection_state,
+            commands::get_status_message,
+            commands::set_status_message
+        ])
         .setup(|app| {
             let (app_state, state_rx) = crate::state::AppState::new();
+            app.manage(state_rx.clone());
             tauri::async_runtime::spawn(crate::engine::run(app_state));
-            let _tray = crate::tray::build(app, state_rx)?;
+            let _tray = crate::tray::build(app, state_rx.clone())?;
 
             // Phase 0: crude startup update check. No UI feedback yet — just
             // proves the mechanism works end-to-end (real verification is a
