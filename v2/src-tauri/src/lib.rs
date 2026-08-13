@@ -13,6 +13,8 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![greet])
         .setup(|app| {
             let _tray = TrayIconBuilder::new()
@@ -30,6 +32,29 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // Phase 0: crude startup update check. No UI feedback yet — just
+            // proves the mechanism works end-to-end (real verification is a
+            // later task). Silently no-ops if the check fails.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri_plugin_updater::UpdaterExt;
+                if let Ok(Some(update)) = handle.updater().unwrap().check().await {
+                    let mut downloaded = 0;
+                    update
+                        .download_and_install(
+                            |chunk_length, _content_length| {
+                                downloaded += chunk_length;
+                                println!("downloaded {downloaded} bytes");
+                            },
+                            || println!("download finished"),
+                        )
+                        .await
+                        .unwrap();
+                    handle.restart();
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {
