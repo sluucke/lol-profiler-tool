@@ -1,5 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 mod commands;
 mod engine;
@@ -31,6 +31,15 @@ pub fn run() {
             app.manage(state_rx.clone());
             tauri::async_runtime::spawn(crate::engine::run(app_state));
             let _tray = crate::tray::build(app, state_rx.clone())?;
+
+            let mut events_rx = state_rx;
+            let handle_for_events = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                while events_rx.changed().await.is_ok() {
+                    let state = *events_rx.borrow();
+                    let _ = handle_for_events.emit("connection-state-changed", state);
+                }
+            });
 
             // Phase 0: crude startup update check. No UI feedback yet — just
             // proves the mechanism works end-to-end (real verification is a
