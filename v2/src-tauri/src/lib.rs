@@ -1,13 +1,12 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use tauri::{
-    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
-};
+use tauri::WindowEvent;
 
+mod engine;
 mod lcu;
 mod league_path;
 mod settings;
 mod state;
+mod tray;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -22,21 +21,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![greet])
         .setup(|app| {
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .on_tray_icon_event(|tray, event| {
-                    // Left-click only: right-click is reserved for a future
-                    // tray context menu, which would otherwise race with
-                    // this handler also showing/focusing the window.
-                    if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                })
-                .build(app)?;
+            let (app_state, state_rx) = crate::state::AppState::new();
+            tauri::async_runtime::spawn(crate::engine::run(app_state));
+            let _tray = crate::tray::build(app, state_rx)?;
 
             // Phase 0: crude startup update check. No UI feedback yet — just
             // proves the mechanism works end-to-end (real verification is a
