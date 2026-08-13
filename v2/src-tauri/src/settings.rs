@@ -4,7 +4,7 @@
 //! This phase only needs to READ config.json (no settings UI exists yet
 //! to write it from) and read message.txt.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -58,17 +58,26 @@ fn league_dir_override_from(config: &Value) -> Option<PathBuf> {
 }
 
 pub fn read_message() -> String {
+    read_message_at(&message_path())
+}
+
+fn read_message_at(path: &Path) -> String {
     // .trim() matches main.py's read_message(), which strips the file
     // content — without it, a trailing newline most editors add on save
     // would get sent as part of the status message, unlike v1.
-    std::fs::read_to_string(message_path())
-        .unwrap_or_default()
-        .trim()
-        .to_string()
+    std::fs::read_to_string(path).unwrap_or_default().trim().to_string()
 }
 
+// Unlike the read functions above, a write failure has no safe default to
+// fall back to — silently swallowing it would report "saved" to the UI
+// when the file wasn't actually written, so this surfaces the real error
+// instead of collapsing it.
 pub fn set_message(message: &str) -> std::io::Result<()> {
-    std::fs::write(message_path(), message)
+    set_message_at(&message_path(), message)
+}
+
+fn set_message_at(path: &Path, message: &str) -> std::io::Result<()> {
+    std::fs::write(path, message)
 }
 
 #[cfg(test)]
@@ -111,12 +120,12 @@ mod tests {
 
     #[test]
     fn set_message_then_read_message_round_trips() {
-        // Uses the real base_dir() (%TEMP%\LoLProfilerTool) — acceptable
-        // here since it's the same directory the real app uses, and this
-        // test only writes a value it also cleans up.
-        let original = read_message();
-        set_message("test round trip").unwrap();
-        assert_eq!(read_message(), "test round trip");
-        set_message(&original).unwrap();
+        // Uses an isolated scratch path (not the real message.txt under
+        // base_dir()) so a failed assert here can never leave a real
+        // user's status message clobbered mid-test.
+        let path = std::env::temp_dir().join(format!("settings_test_message_{}", std::process::id()));
+        set_message_at(&path, "test round trip").unwrap();
+        assert_eq!(read_message_at(&path), "test round trip");
+        std::fs::remove_file(&path).ok();
     }
 }
