@@ -39,23 +39,37 @@ pub async fn run(state: AppState) {
             continue;
         };
 
-        if settings::status_message_enabled() {
-            match sync_status_message(&client, &creds).await {
-                Ok(()) => state.set(ConnectionState::Connected),
-                Err(e) => {
-                    eprintln!("status message sync failed: {e}");
-                    state.set(ConnectionState::Error);
+        // get_status_message doubles as the LCU health check, matching
+        // src/main.py's sync_loop: it calls get_gameflow_phase()
+        // unconditionally (even with status-message sync disabled) so a
+        // wedged/unreachable LCU still trips the error state. Without this,
+        // disabling sync would make the tray report Connected regardless
+        // of whether the LCU actually responds.
+        match client.get_status_message(&creds).await {
+            Ok(current) => {
+                if settings::status_message_enabled() {
+                    if let Err(e) = apply_status_message(&client, &creds, &current).await {
+                        eprintln!("status message sync failed: {e}");
+                        state.set(ConnectionState::Error);
+                        continue;
+                    }
                 }
+                state.set(ConnectionState::Connected);
             }
-        } else {
-            state.set(ConnectionState::Connected);
+            Err(e) => {
+                eprintln!("LCU health check failed: {e}");
+                state.set(ConnectionState::Error);
+            }
         }
     }
 }
 
-async fn sync_status_message(client: &LcuClient, creds: &lcu::LcuCredentials) -> Result<(), lcu::LcuError> {
+async fn apply_status_message(
+    client: &LcuClient,
+    creds: &lcu::LcuCredentials,
+    current: &str,
+) -> Result<(), lcu::LcuError> {
     let desired = settings::read_message();
-    let current = client.get_status_message(creds).await?;
     if desired != current {
         client.set_status_message(creds, &desired).await?;
     }

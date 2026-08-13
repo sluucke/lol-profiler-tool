@@ -30,8 +30,17 @@ impl AppState {
     }
 
     pub fn set(&self, state: ConnectionState) {
-        // A send error just means every receiver was dropped (e.g. during
-        // shutdown) — nothing meaningful to do about that here.
-        let _ = self.tx.send(state);
+        // send_if_modified (not send): the engine polls every 5s regardless
+        // of whether anything actually changed — using plain send() would
+        // wake every receiver (e.g. tray.rs's watcher) on every tick even
+        // in a steady state, not just on real transitions.
+        self.tx.send_if_modified(|current| {
+            if *current == state {
+                false
+            } else {
+                *current = state;
+                true
+            }
+        });
     }
 }
