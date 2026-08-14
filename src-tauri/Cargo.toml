@@ -1,6 +1,6 @@
 [package]
 name = "v2"
-version = "2.0.0"
+version = "2.0.1",
 description = "Customize your League of Legends profile from the desktop."
 authors = ["LoL Profiler Tool"]
 license = "MIT"

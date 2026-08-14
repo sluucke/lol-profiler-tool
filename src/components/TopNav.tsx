@@ -73,10 +73,12 @@ export function TopNav({
   active,
   onChange,
   onOpenSettings,
+  onOpenCredits,
 }: {
   active: Screen;
   onChange: (screen: Screen) => void;
   onOpenSettings: () => void;
+  onOpenCredits: () => void;
 }) {
   return (
     <nav className="hextech-nav">
@@ -97,7 +99,7 @@ export function TopNav({
         ))}
       </div>
       <div className="hextech-nav-drag" data-tauri-drag-region />
-      <WindowControls onOpenSettings={onOpenSettings} />
+      <WindowControls onOpenSettings={onOpenSettings} onOpenCredits={onOpenCredits} />
     </nav>
   );
 }

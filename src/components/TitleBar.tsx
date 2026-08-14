@@ -1,5 +1,4 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import closeIcon from "../assets/window/control-close.png";
 import helpIcon from "../assets/window/control-help.png";
 import hideIcon from "../assets/window/control-hide.png";
@@ -36,7 +35,13 @@ function ChromeButton({
   );
 }
 
-export function WindowControls({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function WindowControls({
+  onOpenSettings,
+  onOpenCredits,
+}: {
+  onOpenSettings: () => void;
+  onOpenCredits: () => void;
+}) {
   function minimize() {
     void getCurrentWindow().minimize();
   }
@@ -45,13 +50,9 @@ export function WindowControls({ onOpenSettings }: { onOpenSettings: () => void 
     void getCurrentWindow().hide();
   }
 
-  function help() {
-    void openUrl("https://github.com/sluucke/lol-profiler-tool");
-  }
-
   return (
     <div className="hextech-win-controls">
-      <ChromeButton label="Help" icon={helpIcon} onClick={help} />
+      <ChromeButton label="Credits" icon={helpIcon} onClick={onOpenCredits} />
       <ChromeButton label="Minimize" icon={hideIcon} onClick={minimize} />
       <ChromeButton label="Settings" icon={settingsIcon} onClick={onOpenSettings} />
       <ChromeButton label="Close" icon={closeIcon} close onClick={hide} />

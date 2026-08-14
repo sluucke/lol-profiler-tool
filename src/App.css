@@ -867,6 +867,26 @@ button:hover .hextech-check[data-checked="true"] {
   color: #f0e6d2;
 }
 
+.credit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.credit-link-external {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  -webkit-mask: url("./assets/uikit/external-link-mask.png") center / contain no-repeat;
+  mask: url("./assets/uikit/external-link-mask.png") center / contain no-repeat;
+}
+
+.credit-link--large .credit-link-external {
+  width: 14px;
+  height: 14px;
+}
+
 .hextech-popup-close {
   position: absolute;
   top: -10px;
