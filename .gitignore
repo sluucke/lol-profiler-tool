@@ -1,20 +1,40 @@
-# Virtual env
-.venv/
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
 
-# Python
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python (legacy v1)
+.venv/
 __pycache__/
 *.pyc
-
-# PyInstaller build output
 build/
-dist/
 
-# Runtime data (now lives in %TEMP%\LoLProfilerTool, but ignore stale
-# copies from before that change / accidental local runs from source)
+# Runtime data (lives in %TEMP%\LoLProfilerTool)
 config.json
 logs.txt
 message.txt
 
-# Brainstorming session mockups and specs (local reference only)
+# Local agent notes
 .superpowers/
 docs/superpowers/
