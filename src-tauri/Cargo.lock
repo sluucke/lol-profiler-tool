@@ -4843,7 +4843,7 @@ dependencies = [
 
 [[package]]
 name = "v2"
-version = "2.0.1",
+version = "2.0.1"
 dependencies = [
  "open",
  "reqwest 0.12.28",
