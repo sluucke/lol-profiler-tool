@@ -1,35 +1,60 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import appIcon from "../assets/app-icon.png";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import closeIcon from "../assets/window/control-close.png";
+import helpIcon from "../assets/window/control-help.png";
+import hideIcon from "../assets/window/control-hide.png";
+import settingsIcon from "../assets/window/control-settings.png";
 
-export function TitleBar() {
-  const appWindow = getCurrentWindow();
+import { playSfx, sfx } from "../sfx";
+
+function ChromeButton({
+  label,
+  icon,
+  onClick,
+  close,
+}: {
+  label: string;
+  icon: string;
+  onClick: () => void;
+  close?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      data-tauri-drag-region="false"
+      onMouseDown={(event) => event.stopPropagation()}
+      onMouseEnter={() => playSfx(sfx.genericHover)}
+      onClick={() => {
+        playSfx(close ? sfx.circlexClick : sfx.framedIconClick);
+        onClick();
+      }}
+      aria-label={label}
+      className="hextech-win-btn"
+    >
+      <img src={icon} alt="" draggable={false} />
+    </button>
+  );
+}
+
+export function WindowControls({ onOpenSettings }: { onOpenSettings: () => void }) {
+  function minimize() {
+    void getCurrentWindow().minimize();
+  }
+
+  function hide() {
+    void getCurrentWindow().hide();
+  }
+
+  function help() {
+    void openUrl("https://github.com/sluucke/lol-profiler-tool");
+  }
 
   return (
-    <div
-      data-tauri-drag-region
-      className="flex h-9 shrink-0 select-none items-center justify-between bg-transparent"
-    >
-      <div data-tauri-drag-region className="flex flex-1 items-center gap-2 px-3">
-        <img src={appIcon} alt="" className="h-5 w-5" draggable={false} />
-      </div>
-      <div className="flex">
-        <button
-          type="button"
-          onClick={() => appWindow.minimize()}
-          aria-label="Minimize"
-          className="flex h-9 w-9 items-center justify-center text-app-text-dim hover:bg-app-border hover:text-app-text"
-        >
-          &#x2212;
-        </button>
-        <button
-          type="button"
-          onClick={() => appWindow.hide()}
-          aria-label="Close"
-          className="flex h-9 w-9 items-center justify-center text-app-text-dim hover:bg-red-600 hover:text-white"
-        >
-          &#x2715;
-        </button>
-      </div>
+    <div className="hextech-win-controls">
+      <ChromeButton label="Help" icon={helpIcon} onClick={help} />
+      <ChromeButton label="Minimize" icon={hideIcon} onClick={minimize} />
+      <ChromeButton label="Settings" icon={settingsIcon} onClick={onOpenSettings} />
+      <ChromeButton label="Close" icon={closeIcon} close onClick={hide} />
     </div>
   );
 }

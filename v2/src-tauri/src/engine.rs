@@ -29,7 +29,7 @@ pub async fn run(state: AppState) {
         // wrap these in tokio::task::spawn_blocking rather than letting the
         // pattern spread further.
         let Some(league_dir) = league_path::resolve(settings::league_dir_override().as_deref()) else {
-            state.set(ConnectionState::Error);
+            state.set(ConnectionState::FolderNotFound);
             continue;
         };
 
@@ -50,7 +50,7 @@ pub async fn run(state: AppState) {
                 if settings::status_message_enabled() {
                     if let Err(e) = apply_status_message(&client, &creds, &current).await {
                         eprintln!("status message sync failed: {e}");
-                        state.set(ConnectionState::Error);
+                        state.set(ConnectionState::LcuError);
                         continue;
                     }
                 }
@@ -58,7 +58,7 @@ pub async fn run(state: AppState) {
             }
             Err(e) => {
                 eprintln!("LCU health check failed: {e}");
-                state.set(ConnectionState::Error);
+                state.set(ConnectionState::LcuError);
             }
         }
     }

@@ -1,31 +1,97 @@
-type Screen = "status";
+import { useState, type CSSProperties, type MouseEvent } from "react";
+import type { Screen } from "../navigation";
+import { SCREENS } from "../navigation";
+import navPointer from "../assets/window/nav-pointer.png";
+import { playSfx, sfx } from "../sfx";
+import { NAV_ICONS } from "./NavIcons";
+import { WindowControls } from "./TitleBar";
 
-const ITEMS: { id: Screen; label: string }[] = [{ id: "status", label: "Status" }];
+function NavItem({
+  id,
+  label,
+  active,
+  onSelect,
+}: {
+  id: Screen;
+  label: string;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const [glowX, setGlowX] = useState(50);
+  const [hovered, setHovered] = useState(false);
+  const icon = NAV_ICONS[id];
 
-function StatusIcon() {
+  function handleMove(event: MouseEvent<HTMLButtonElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    setGlowX(Math.min(100, Math.max(0, x)));
+  }
+
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M4 5h16v11H9l-4 4V5z" strokeLinejoin="round" />
-      <path d="M8 10h8M8 13h5" strokeLinecap="round" />
-    </svg>
+    <button
+      type="button"
+      className="hextech-nav-item"
+      data-active={active}
+      data-hover={hovered}
+      style={{ "--nav-glow-x": `${glowX}%` } as CSSProperties}
+      onClick={() => {
+        playSfx(sfx.navClick);
+        onSelect();
+      }}
+      onMouseEnter={() => {
+        setHovered(true);
+        playSfx(sfx.framedIconHover);
+      }}
+      onMouseMove={handleMove}
+      onMouseLeave={() => {
+        setHovered(false);
+        setGlowX(50);
+      }}
+    >
+      <span className="hextech-nav-selected-glow" />
+      <span className="hextech-nav-hover-glow" />
+      {active && (
+        <img className="hextech-nav-chevron" src={navPointer} alt="" draggable={false} />
+      )}
+      <span
+        className="hextech-nav-icon"
+        style={{ "--nav-icon": `url("${icon}")` } as CSSProperties}
+        aria-hidden="true"
+      />
+      {hovered && (
+        <span className="hextech-tooltip">
+          <span className="hextech-tooltip-caret" aria-hidden="true" />
+          <span className="hextech-tooltip-body">{label}</span>
+        </span>
+      )}
+    </button>
   );
 }
 
-export function TopNav({ active }: { active: Screen }) {
+export function TopNav({
+  active,
+  onChange,
+  onOpenSettings,
+}: {
+  active: Screen;
+  onChange: (screen: Screen) => void;
+  onOpenSettings: () => void;
+}) {
   return (
-    <div className="flex h-12 shrink-0 items-center gap-8 border-b border-app-gold-dark/40 bg-transparent px-6">
-      {ITEMS.map((item) => (
-        <div
-          key={item.id}
-          title={item.label}
-          className={
-            "flex items-center justify-center transition-colors " +
-            (item.id === active ? "text-app-gold" : "text-app-text-dim hover:text-app-gold-dark")
-          }
-        >
-          <StatusIcon />
+    <nav className="hextech-nav">
+      {SCREENS.map((item, index) => (
+        <div key={item.id} className="flex items-stretch">
+          {index > 0 && <span className="hextech-nav-divider" />}
+          <NavItem
+            id={item.id}
+            label={item.label}
+            active={item.id === active}
+            onSelect={() => onChange(item.id)}
+          />
         </div>
       ))}
-    </div>
+      <div data-tauri-drag-region className="h-full min-w-8 flex-1" />
+      <WindowControls onOpenSettings={onOpenSettings} />
+    </nav>
   );
 }

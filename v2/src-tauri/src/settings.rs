@@ -72,6 +72,28 @@ fn read_message_at(path: &Path) -> String {
 // fall back to — silently swallowing it would report "saved" to the UI
 // when the file wasn't actually written, so this surfaces the real error
 // instead of collapsing it.
+pub fn auto_update_enabled() -> bool {
+    auto_update_enabled_from(&load_config())
+}
+
+fn auto_update_enabled_from(config: &Value) -> bool {
+    config
+        .get("auto_update_enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+pub fn set_auto_update_enabled(enabled: bool) -> std::io::Result<()> {
+    let mut map = match load_config() {
+        Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    map.insert("auto_update_enabled".into(), Value::Bool(enabled));
+    let json = serde_json::to_string_pretty(&Value::Object(map))
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    std::fs::write(config_path(), json)
+}
+
 pub fn set_message(message: &str) -> std::io::Result<()> {
     set_message_at(&message_path(), message)
 }
@@ -116,6 +138,18 @@ mod tests {
             league_dir_override_from(&config),
             Some(PathBuf::from(r"C:\Riot Games\League of Legends"))
         );
+    }
+
+    #[test]
+    fn auto_update_enabled_defaults_false_when_key_missing() {
+        let config: Value = serde_json::from_str("{}").unwrap();
+        assert!(!auto_update_enabled_from(&config));
+    }
+
+    #[test]
+    fn auto_update_enabled_honors_explicit_true() {
+        let config: Value = serde_json::from_str(r#"{"auto_update_enabled": true}"#).unwrap();
+        assert!(auto_update_enabled_from(&config));
     }
 
     #[test]

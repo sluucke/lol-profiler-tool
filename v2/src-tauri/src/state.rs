@@ -12,8 +12,10 @@ pub enum ConnectionState {
     WaitingForClient,
     /// Client open, LCU calls succeeding.
     Connected,
-    /// Folder not found, or an LCU call failed this cycle.
-    Error,
+    /// Auto-detect and manual override both failed to find LeagueClient.exe.
+    FolderNotFound,
+    /// Client lockfile exists, but an LCU call failed this cycle.
+    LcuError,
 }
 
 /// The engine loop is the one sender; the tray (and later, other

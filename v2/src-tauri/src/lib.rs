@@ -23,8 +23,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             commands::get_connection_state,
+            commands::get_league_dir,
             commands::get_status_message,
-            commands::set_status_message
+            commands::set_status_message,
+            commands::get_auto_update_enabled,
+            commands::set_auto_update_enabled
         ])
         .setup(|app| {
             let (app_state, state_rx) = crate::state::AppState::new();
@@ -41,11 +44,13 @@ pub fn run() {
                 }
             });
 
-            // Phase 0: crude startup update check. No UI feedback yet — just
-            // proves the mechanism works end-to-end (real verification is a
-            // later task). Silently no-ops if the check fails.
+            // Startup update check only when Auto update is enabled. Manual
+            // checks happen from Settings so users can skip silent installs.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                if !crate::settings::auto_update_enabled() {
+                    return;
+                }
                 use tauri_plugin_updater::UpdaterExt;
                 if let Ok(Some(update)) = handle.updater().unwrap().check().await {
                     let mut downloaded = 0;

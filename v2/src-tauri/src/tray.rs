@@ -16,7 +16,9 @@ fn icon_bytes(state: ConnectionState) -> &'static [u8] {
     match state {
         ConnectionState::Connected => include_bytes!("../icons/tray/ok.png"),
         ConnectionState::WaitingForClient => include_bytes!("../icons/tray/loading.png"),
-        ConnectionState::Error => include_bytes!("../icons/tray/error.png"),
+        ConnectionState::FolderNotFound | ConnectionState::LcuError => {
+            include_bytes!("../icons/tray/error.png")
+        }
     }
 }
 
@@ -25,6 +27,7 @@ pub fn build(app: &tauri::App, mut state_rx: watch::Receiver<ConnectionState>) -
 
     let tray = TrayIconBuilder::new()
         .icon(initial_icon)
+        .tooltip("LoL Profiler Tool")
         .on_tray_icon_event(|tray, event| {
             // Left-click only: right-click is reserved for a future tray
             // context menu, which would otherwise race with this handler

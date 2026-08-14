@@ -1,41 +1,22 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { Button } from "../components/Button";
 import { Card } from "../components/Card";
-
-type ConnectionState = "WaitingForClient" | "Connected" | "Error";
-
-const STATE_LABEL: Record<ConnectionState, string> = {
-  WaitingForClient: "Waiting for client",
-  Connected: "Connected",
-  Error: "Error",
-};
-
-const STATE_COLOR: Record<ConnectionState, string> = {
-  WaitingForClient: "bg-state-waiting",
-  Connected: "bg-state-connected",
-  Error: "bg-state-error",
-};
+import { Checkbox } from "../components/Checkbox";
+import { Textarea } from "../components/Input";
+import { ScreenHeader } from "../components/ScreenHeader";
 
 export function StatusScreen() {
-  const [connectionState, setConnectionState] = useState<ConnectionState>("WaitingForClient");
   const [message, setMessage] = useState("");
+  const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<ConnectionState>("get_connection_state").then(setConnectionState);
     invoke<string>("get_status_message").then(setMessage);
-
-    const unlisten = listen<ConnectionState>("connection-state-changed", (event) => {
-      setConnectionState(event.payload);
-    });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
   }, []);
 
-  async function handleBlur() {
+  async function handleSave() {
     setSaving(true);
     setSaveError(null);
     try {
@@ -48,29 +29,31 @@ export function StatusScreen() {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <span
-          className={`h-2.5 w-2.5 rotate-45 ${STATE_COLOR[connectionState]}`}
-          style={{ boxShadow: "0 0 8px currentColor" }}
-        />
-        <span className="font-display text-xs font-semibold tracking-[0.15em] text-app-text uppercase">
-          {STATE_LABEL[connectionState]}
-        </span>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-6">
+      <ScreenHeader title="Status Message" />
 
-      <Card title="Status Message">
-        <textarea
+      <Checkbox checked={enabled} onChange={setEnabled}>
+        Enable status message
+      </Checkbox>
+
+      <Card
+        fill
+        className="min-h-0 flex-1"
+        footer={
+          <Button onClick={handleSave} disabled={saving}>
+            Save
+          </Button>
+        }
+      >
+        <Textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          onBlur={handleBlur}
-          rows={4}
           disabled={saving}
           placeholder="Your status message..."
-          className="w-full resize-y rounded-2xl border border-app-border bg-app-bg px-4 py-3 text-sm text-app-text outline-none transition-shadow placeholder:text-app-text-dim focus:border-app-gold-dark focus:shadow-[0_0_0_3px_rgba(240,198,116,0.15)] disabled:opacity-60"
+          className="min-h-0 flex-1"
         />
-        {saving && <div className="mt-1 text-[11px] text-app-text-dim">Saving…</div>}
-        {saveError && <div className="mt-1 text-[11px] text-state-error">Couldn't save: {saveError}</div>}
+        {saving && <div className="mt-2 text-[11px] text-app-text-dim">Saving…</div>}
+        {saveError && <div className="mt-2 text-[11px] text-state-error">Couldn't save: {saveError}</div>}
       </Card>
     </div>
   );
