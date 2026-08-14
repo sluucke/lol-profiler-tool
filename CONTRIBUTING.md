@@ -34,7 +34,7 @@ Build the installer with `npm run tauri build`. Output lands in `src-tauri/targe
 | --- | --- |
 | `src/` | React UI |
 | `src-tauri/` | Rust / Tauri backend, LCU client, tray, installer config |
-| `legacy/` | Original Python v1 app — leave it alone unless the change is specifically for v1 |
+| `legacy/` | Original Python v1 app. Leave it alone unless the change is specifically for v1 |
 
 ## Pull requests
 
