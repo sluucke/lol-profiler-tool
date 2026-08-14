@@ -67,7 +67,7 @@ export function StatusScreen() {
           rows={4}
           disabled={saving}
           placeholder="Your status message..."
-          className="w-full resize-y rounded border border-app-border bg-app-bg p-2 text-sm text-app-text outline-none focus:border-app-gold disabled:opacity-60"
+          className="w-full resize-y rounded-2xl border border-app-border bg-app-bg px-4 py-3 text-sm text-app-text outline-none transition-shadow placeholder:text-app-text-dim focus:border-app-gold-dark focus:shadow-[0_0_0_3px_rgba(240,198,116,0.15)] disabled:opacity-60"
         />
         {saving && <div className="mt-1 text-[11px] text-app-text-dim">Saving…</div>}
         {saveError && <div className="mt-1 text-[11px] text-state-error">Couldn't save: {saveError}</div>}
