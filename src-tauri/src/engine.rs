@@ -1,5 +1,5 @@
 //! Background loops: 5s LCU sync (status, rank, auto lobby) plus the 0.5s
-//! auto-accept poll. Mirrors src/main.py's sync_loop + auto_accept.py.
+//! poll for auto-accept, insta lock, and auto ban.
 
 use std::time::Duration;
 
@@ -16,8 +16,8 @@ const DODGE_RETRIES: u8 = 5;
 
 pub async fn run(state: AppState) {
     let client = LcuClient::new();
-    let accept_client = LcuClient::new();
-    tokio::spawn(auto_accept_loop(accept_client));
+    let fast_client = LcuClient::new();
+    tokio::spawn(fast_loop(fast_client));
     poll_loop(state, client).await;
 }
 
@@ -115,37 +115,185 @@ async fn auto_reveal(client: &LcuClient, creds: &lcu::LcuCredentials) {
     }
 }
 
-async fn auto_accept_loop(client: LcuClient) {
+async fn fast_loop(client: LcuClient) {
     let mut interval = tokio::time::interval(AUTO_ACCEPT_INTERVAL);
     let mut already_accepted = false;
+    let mut locked_action: Option<i64> = None;
+    let mut banned_action: Option<i64> = None;
     loop {
         interval.tick().await;
-        if !settings::auto_accept_enabled() {
-            already_accepted = false;
-            continue;
-        }
         let Some(creds) = current_credentials() else {
             already_accepted = false;
+            locked_action = None;
+            banned_action = None;
             continue;
         };
-        match client.get_matchmaking_search_state(&creds).await {
-            Ok(state) if state == "Found" => {
-                if !already_accepted {
-                    match client.accept_ready_check(&creds).await {
-                        Ok(()) => {
-                            already_accepted = true;
-                            log::write("Auto Accept: match accepted.");
+
+        if settings::auto_accept_enabled() {
+            match client.get_matchmaking_search_state(&creds).await {
+                Ok(state) if state == "Found" => {
+                    if !already_accepted {
+                        match client.accept_ready_check(&creds).await {
+                            Ok(()) => {
+                                already_accepted = true;
+                                log::write("Auto Accept: match accepted.");
+                            }
+                            Err(e) => log::write(&format!("Auto Accept failed: {e}")),
                         }
-                        Err(e) => log::write(&format!("Auto Accept failed: {e}")),
                     }
                 }
+                Ok(_) => already_accepted = false,
+                Err(e) => {
+                    already_accepted = false;
+                    log::write(&format!("Auto Accept failed: {e}"));
+                }
             }
-            Ok(_) => already_accepted = false,
-            Err(e) => {
-                already_accepted = false;
-                log::write(&format!("Auto Accept failed: {e}"));
-            }
+        } else {
+            already_accepted = false;
         }
+
+        if settings::insta_lock_enabled() || settings::auto_ban_enabled() {
+            match client.get_champ_select_session(&creds).await {
+                Ok(Some(session)) => {
+                    apply_auto_ban(&client, &creds, &session, &mut banned_action).await;
+                    apply_insta_lock(&client, &creds, &session, &mut locked_action).await;
+                }
+                Ok(None) => {
+                    locked_action = None;
+                    banned_action = None;
+                }
+                Err(_) => {}
+            }
+        } else {
+            locked_action = None;
+            banned_action = None;
+        }
+    }
+}
+
+fn champ_select_actions(session: &serde_json::Value) -> impl Iterator<Item = &serde_json::Value> {
+    session
+        .get("actions")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_array)
+        .flatten()
+}
+
+fn local_cell_id(session: &serde_json::Value) -> Option<i64> {
+    session.get("localPlayerCellId").and_then(serde_json::Value::as_i64)
+}
+
+fn own_in_progress_action<'a>(session: &'a serde_json::Value, kind: &str) -> Option<&'a serde_json::Value> {
+    let local = local_cell_id(session)?;
+    champ_select_actions(session).find(|action| {
+        action.get("actorCellId").and_then(serde_json::Value::as_i64) == Some(local)
+            && action.get("type").and_then(serde_json::Value::as_str) == Some(kind)
+            && action.get("isInProgress").and_then(serde_json::Value::as_bool) == Some(true)
+            && action.get("completed").and_then(serde_json::Value::as_bool) != Some(true)
+    })
+}
+
+fn champion_already_picked(session: &serde_json::Value, champion_id: i64) -> bool {
+    ["myTeam", "theirTeam"].iter().any(|key| {
+        session
+            .get(*key)
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|member| member.get("championId").and_then(serde_json::Value::as_i64) == Some(champion_id))
+    })
+}
+
+fn champion_unavailable(session: &serde_json::Value, champion_id: i64) -> bool {
+    champion_id <= 0 || champion_already_banned(session, champion_id) || champion_already_picked(session, champion_id)
+}
+
+fn insta_lock_target(session: &serde_json::Value) -> i64 {
+    let first = settings::insta_lock_first_champion_id();
+    if !champion_unavailable(session, first) {
+        return first;
+    }
+    let second = settings::insta_lock_second_champion_id();
+    if !champion_unavailable(session, second) {
+        return second;
+    }
+    0
+}
+
+fn champion_already_banned(session: &serde_json::Value, champion_id: i64) -> bool {
+    let Some(bans) = session.get("bans") else {
+        return false;
+    };
+    ["myTeamBans", "theirTeamBans"].iter().any(|key| {
+        bans.get(*key)
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|id| id.as_i64() == Some(champion_id))
+    })
+}
+
+async fn apply_auto_ban(
+    client: &LcuClient,
+    creds: &lcu::LcuCredentials,
+    session: &serde_json::Value,
+    banned_action: &mut Option<i64>,
+) {
+    if !settings::auto_ban_enabled() {
+        return;
+    }
+    let champion_id = settings::auto_ban_champion_id();
+    if champion_id <= 0 || champion_already_banned(session, champion_id) {
+        return;
+    }
+    let Some(action) = own_in_progress_action(session, "ban") else {
+        return;
+    };
+    let Some(action_id) = action.get("id").and_then(serde_json::Value::as_i64) else {
+        return;
+    };
+    if *banned_action == Some(action_id) {
+        return;
+    }
+    match client.complete_champ_select_action(creds, action_id, champion_id).await {
+        Ok(()) => {
+            *banned_action = Some(action_id);
+            log::write("Auto Ban: champion banned.");
+        }
+        Err(e) => log::write(&format!("Auto Ban failed: {e}")),
+    }
+}
+
+async fn apply_insta_lock(
+    client: &LcuClient,
+    creds: &lcu::LcuCredentials,
+    session: &serde_json::Value,
+    locked_action: &mut Option<i64>,
+) {
+    if !settings::insta_lock_enabled() {
+        return;
+    }
+    let Some(action) = own_in_progress_action(session, "pick") else {
+        return;
+    };
+    let Some(action_id) = action.get("id").and_then(serde_json::Value::as_i64) else {
+        return;
+    };
+    if *locked_action == Some(action_id) {
+        return;
+    }
+    let champion_id = insta_lock_target(session);
+    if champion_id <= 0 {
+        return;
+    }
+    match client.complete_champ_select_action(creds, action_id, champion_id).await {
+        Ok(()) => {
+            *locked_action = Some(action_id);
+            log::write("Insta Lock: champion locked.");
+        }
+        Err(e) => log::write(&format!("Insta Lock failed: {e}")),
     }
 }
 

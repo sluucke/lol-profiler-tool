@@ -28,8 +28,8 @@ export function RiotIdPanel() {
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
-      <p className="max-w-lg text-sm leading-6 text-app-text-dim">
+    <div className="flex min-h-0 max-w-xl flex-1 flex-col gap-4">
+      <p className="max-w-lg shrink-0 text-sm leading-6 text-app-text-dim">
         Changes your Game Name and tagline. This can only be done once every 90 days.
       </p>
       <div className="hextech-player-name">
@@ -54,7 +54,7 @@ export function RiotIdPanel() {
       </div>
       {error && <p className="text-[12px] text-state-error">{error}</p>}
       {status && <p className="text-[12px] text-app-text-dim">{status}</p>}
-      <div className="flex gap-4 pt-2">
+      <div className="mt-auto flex gap-4 pt-2">
         <Button muted disabled={busy} onClick={() => { setName(""); setTag(""); setError(null); setStatus(null); }}>
           Cancel
         </Button>

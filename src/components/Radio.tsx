@@ -21,8 +21,10 @@ export function Radio({
         onChange();
       }}
     >
-      <span className="hextech-radio" data-checked={checked}>
-        <span className="hextech-radio-pip" />
+      <span className="hextech-radio-wrap">
+        <span className="hextech-radio" data-checked={checked}>
+          <span className="hextech-radio-pip" />
+        </span>
       </span>
       {icon && (
         <span className="hextech-rank-icon">

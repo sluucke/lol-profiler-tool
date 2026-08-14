@@ -73,8 +73,8 @@ export function FriendsPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="max-w-lg text-sm leading-6 text-app-text-dim">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <p className="max-w-lg shrink-0 text-sm leading-6 text-app-text-dim">
         Remove friends from your League client list. This cannot be undone from here.
       </p>
       <Input
@@ -83,7 +83,7 @@ export function FriendsPanel() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      <div className="text-[11px] font-bold tracking-[0.18em] text-app-text-dim uppercase">
+      <div className="shrink-0 text-[11px] font-bold tracking-[0.18em] text-app-text-dim uppercase">
         {loading ? "Loading…" : `${visible.length} friends`}
       </div>
       {visible.length === 0 ? (
@@ -92,7 +92,6 @@ export function FriendsPanel() {
         <VirtualList
           items={visible}
           estimateSize={44}
-          className="h-[28rem]"
           itemKey={(friend) => friend.id}
           renderItem={(friend) => (
             <div className="flex items-center justify-between gap-3 py-1">
@@ -109,9 +108,9 @@ export function FriendsPanel() {
           )}
         />
       )}
-      {error && <p className="text-[12px] text-state-error">{error}</p>}
-      {status && <p className="text-[12px] text-app-text-dim">{status}</p>}
-      <div className="flex justify-center">
+      {error && <p className="shrink-0 text-[12px] text-state-error">{error}</p>}
+      {status && <p className="shrink-0 text-[12px] text-app-text-dim">{status}</p>}
+      <div className="flex shrink-0 justify-center">
         <Button muted disabled={busyId != null || friends.length === 0} onClick={() => void removeAll()}>
           {confirmAll ? `Confirm remove ${friends.length}` : "Remove all"}
         </Button>

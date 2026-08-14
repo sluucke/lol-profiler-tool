@@ -52,8 +52,8 @@ export function BannerPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="max-w-lg text-sm leading-6 text-app-text-dim">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <p className="max-w-lg shrink-0 text-sm leading-6 text-app-text-dim">
         The splash art displayed as your profile background.
       </p>
       <Input
@@ -65,10 +65,10 @@ export function BannerPanel() {
           parentRef.current?.scrollTo({ top: 0 });
         }}
       />
-      <div className="text-[11px] font-bold tracking-[0.18em] text-app-text-dim uppercase">
+      <div className="shrink-0 text-[11px] font-bold tracking-[0.18em] text-app-text-dim uppercase">
         {items.length} skins
       </div>
-      <div ref={parentRef} className="h-[32rem] overflow-auto pr-1">
+      <div ref={parentRef} className="min-h-0 flex-1 overflow-auto pr-1">
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((row) => {
             const start = row.index * COLUMNS;
@@ -95,9 +95,9 @@ export function BannerPanel() {
           })}
         </div>
       </div>
-      {error && <p className="text-[12px] text-state-error">{error}</p>}
-      {status && <p className="text-[12px] text-app-text-dim">{status}</p>}
-      <div className="flex justify-center gap-6 py-1">
+      {error && <p className="shrink-0 text-[12px] text-state-error">{error}</p>}
+      {status && <p className="shrink-0 text-[12px] text-app-text-dim">{status}</p>}
+      <div className="flex shrink-0 justify-center gap-6 py-1">
         <Button muted disabled={busy} onClick={() => void save(0)}>
           Restore Default
         </Button>

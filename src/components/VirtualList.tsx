@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 export function VirtualList<T>({
   items,
   estimateSize,
-  className = "h-[28rem]",
+  className = "min-h-0 flex-1",
   renderItem,
   itemKey,
 }: {

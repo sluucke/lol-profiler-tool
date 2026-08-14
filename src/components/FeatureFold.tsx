@@ -6,7 +6,7 @@ export function FeatureFold({
   title,
   icon,
   open,
-  grow,
+  grow = true,
   onToggle,
   children,
 }: {
@@ -23,11 +23,13 @@ export function FeatureFold({
     if (open) setMounted(true);
   }, [open]);
 
+  const fill = open && grow;
+
   return (
-    <Card fill={open && grow}>
+    <Card fill={fill}>
       <button
         type="button"
-        className="hextech-fold-header"
+        className="hextech-fold-header shrink-0"
         aria-expanded={open}
         onMouseEnter={() => playSfx(sfx.genericHover)}
         onClick={() => {
@@ -47,7 +49,7 @@ export function FeatureFold({
       </button>
       {mounted && (
         <div
-          className={`hextech-fold-body ${open ? "" : "hidden"} ${open && grow ? "flex min-h-0 flex-1 flex-col" : ""}`}
+          className={`hextech-fold-body ${open ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "hidden"}`}
         >
           {children}
         </div>

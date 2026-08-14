@@ -48,8 +48,8 @@ export function RankPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-app-text-dim">The rank shown in chat presence. Solo/Duo queue only.</p>
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <p className="shrink-0 text-sm text-app-text-dim">The rank shown in chat presence. Solo/Duo queue only.</p>
       <Checkbox
         checked={enabled}
         onChange={(next) => {
@@ -60,7 +60,7 @@ export function RankPanel() {
         Enable rank override
       </Checkbox>
       <Divider />
-      <div className="grid gap-8 sm:grid-cols-2">
+      <div className="grid min-h-0 flex-1 gap-8 overflow-auto py-0.5 pl-1 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <div className="text-[11px] font-bold tracking-[0.18em] text-app-gold uppercase">Rank</div>
           {TIERS.map((item) => (

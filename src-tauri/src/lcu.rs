@@ -303,6 +303,37 @@ impl LcuClient {
         Ok(())
     }
 
+    pub async fn patch_champ_select_action(
+        &self,
+        creds: &LcuCredentials,
+        action_id: i64,
+        champion_id: i64,
+        completed: bool,
+    ) -> Result<(), LcuError> {
+        let path = format!("/lol-champ-select/v1/session/actions/{action_id}");
+        self.send(
+            reqwest::Method::PATCH,
+            creds,
+            &path,
+            Some(&json!({ "championId": champion_id, "completed": completed })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn complete_champ_select_action(
+        &self,
+        creds: &LcuCredentials,
+        action_id: i64,
+        champion_id: i64,
+    ) -> Result<(), LcuError> {
+        let _ = self
+            .patch_champ_select_action(creds, action_id, champion_id, false)
+            .await;
+        self.patch_champ_select_action(creds, action_id, champion_id, true)
+            .await
+    }
+
     pub async fn quit_champ_select(&self, creds: &LcuCredentials) -> Result<(), LcuError> {
         let path = concat!(
             "/lol-login/v1/session/invoke?destination=lcdsServiceProxy&method=call&",

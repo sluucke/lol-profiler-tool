@@ -107,6 +107,37 @@ pub fn set_logs_enabled(enabled: bool) -> std::io::Result<()> {
     })
 }
 
+pub fn normalize_window_size(value: &str) -> &'static str {
+    match value {
+        "small" => "small",
+        "large" => "large",
+        _ => "medium",
+    }
+}
+
+pub fn window_size() -> &'static str {
+    load_config()
+        .get("window_size")
+        .and_then(|v| v.as_str())
+        .map(normalize_window_size)
+        .unwrap_or("medium")
+}
+
+pub fn set_window_size(size: &str) -> std::io::Result<()> {
+    let size = normalize_window_size(size);
+    patch_config(|map| {
+        map.insert("window_size".into(), Value::String(size.to_string()));
+    })
+}
+
+pub fn window_logical_px(size: &str) -> (f64, f64) {
+    match normalize_window_size(size) {
+        "small" => (960.0, 820.0),
+        "large" => (1280.0, 1000.0),
+        _ => (1080.0, 920.0),
+    }
+}
+
 pub fn auto_accept_enabled() -> bool {
     bool_key(&load_config(), "auto_accept_enabled", false)
 }
@@ -114,6 +145,62 @@ pub fn auto_accept_enabled() -> bool {
 pub fn set_auto_accept_enabled(enabled: bool) -> std::io::Result<()> {
     patch_config(|map| {
         map.insert("auto_accept_enabled".into(), Value::Bool(enabled));
+    })
+}
+
+pub fn insta_lock_enabled() -> bool {
+    bool_key(&load_config(), "insta_lock_enabled", false)
+}
+
+pub fn set_insta_lock_enabled(enabled: bool) -> std::io::Result<()> {
+    patch_config(|map| {
+        map.insert("insta_lock_enabled".into(), Value::Bool(enabled));
+    })
+}
+
+fn champion_id_key(key: &str) -> i64 {
+    load_config()
+        .get(key)
+        .and_then(Value::as_i64)
+        .filter(|id| *id > 0)
+        .unwrap_or(0)
+}
+
+pub fn insta_lock_first_champion_id() -> i64 {
+    champion_id_key("insta_lock_first_champion_id")
+}
+
+pub fn insta_lock_second_champion_id() -> i64 {
+    champion_id_key("insta_lock_second_champion_id")
+}
+
+pub fn set_insta_lock_champion_id(slot: &str, champion_id: i64) -> std::io::Result<()> {
+    let key = match slot {
+        "second" => "insta_lock_second_champion_id",
+        _ => "insta_lock_first_champion_id",
+    };
+    patch_config(|map| {
+        map.insert(key.into(), Value::from(champion_id.max(0)));
+    })
+}
+
+pub fn auto_ban_enabled() -> bool {
+    bool_key(&load_config(), "auto_ban_enabled", false)
+}
+
+pub fn set_auto_ban_enabled(enabled: bool) -> std::io::Result<()> {
+    patch_config(|map| {
+        map.insert("auto_ban_enabled".into(), Value::Bool(enabled));
+    })
+}
+
+pub fn auto_ban_champion_id() -> i64 {
+    champion_id_key("auto_ban_champion_id")
+}
+
+pub fn set_auto_ban_champion_id(champion_id: i64) -> std::io::Result<()> {
+    patch_config(|map| {
+        map.insert("auto_ban_champion_id".into(), Value::from(champion_id.max(0)));
     })
 }
 
@@ -218,6 +305,13 @@ mod tests {
     fn auto_update_enabled_defaults_false_when_key_missing() {
         let config: Value = serde_json::from_str("{}").unwrap();
         assert!(!bool_key(&config, "auto_update_enabled", false));
+    }
+
+    #[test]
+    fn window_size_normalizes_unknown_to_medium() {
+        assert_eq!(normalize_window_size("tiny"), "medium");
+        assert_eq!(normalize_window_size("small"), "small");
+        assert_eq!(normalize_window_size("large"), "large");
     }
 
     #[test]

@@ -39,8 +39,8 @@ export function StatusPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="max-w-lg text-sm leading-6 text-app-text-dim">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <p className="max-w-lg shrink-0 text-sm leading-6 text-app-text-dim">
         The text shown as your chat presence in the League client.
       </p>
       <Checkbox checked={enabled} onChange={(next) => void toggleEnabled(next)}>
@@ -51,11 +51,11 @@ export function StatusPanel() {
         onChange={(e) => setMessage(e.target.value)}
         disabled={saving || !enabled}
         placeholder="Your status message..."
-        className="hextech-textarea-fixed"
+        className="min-h-[8rem]"
       />
-      {saving && <div className="text-[11px] text-app-text-dim">Saving…</div>}
-      {saveError && <div className="text-[11px] text-state-error">Couldn't save: {saveError}</div>}
-      <div className="flex justify-center">
+      {saving && <div className="shrink-0 text-[11px] text-app-text-dim">Saving…</div>}
+      {saveError && <div className="shrink-0 text-[11px] text-state-error">Couldn't save: {saveError}</div>}
+      <div className="flex shrink-0 justify-center">
         <Button onClick={handleSave} disabled={saving || !enabled}>
           Save
         </Button>

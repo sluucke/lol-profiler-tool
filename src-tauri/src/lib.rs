@@ -37,10 +37,18 @@ pub fn run() {
             commands::set_auto_update_enabled,
             commands::get_logs_enabled,
             commands::set_logs_enabled,
+            commands::get_window_size,
+            commands::set_window_size,
             commands::get_autostart_enabled,
             commands::set_autostart_enabled,
             commands::get_auto_accept_enabled,
             commands::set_auto_accept_enabled,
+            commands::get_insta_lock,
+            commands::set_insta_lock_enabled,
+            commands::set_insta_lock_champion,
+            commands::get_auto_ban,
+            commands::set_auto_ban_enabled,
+            commands::set_auto_ban_champion_id,
             commands::get_lobby_reveal,
             commands::set_auto_lobby_reveal_enabled,
             commands::set_lobby_reveal_provider,
@@ -62,6 +70,7 @@ pub fn run() {
             app.manage(state_rx.clone());
             tauri::async_runtime::spawn(crate::engine::run(app_state));
             let _tray = crate::tray::build(app, state_rx.clone())?;
+            let _ = commands::apply_window_size(app.handle(), crate::settings::window_size());
 
             let mut events_rx = state_rx;
             let handle_for_events = app.handle().clone();

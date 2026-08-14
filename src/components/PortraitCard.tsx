@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { playSfx, sfx } from "../sfx";
 
 export function PortraitCard({
   name,
@@ -16,7 +17,16 @@ export function PortraitCard({
   const initial = name.charAt(0).toUpperCase();
 
   return (
-    <button type="button" className="hextech-portrait" data-active={active} onClick={onClick}>
+    <button
+      type="button"
+      className="hextech-portrait"
+      data-active={active}
+      onMouseEnter={() => playSfx(sfx.framedIconHover)}
+      onClick={() => {
+        playSfx(sfx.framedIconClick);
+        onClick?.();
+      }}
+    >
       <div className="hextech-portrait-frame grid place-items-center">
         {showImage ? (
           <img src={image} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />

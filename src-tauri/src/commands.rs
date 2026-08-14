@@ -1,6 +1,6 @@
 //! Tauri commands exposed to the frontend.
 
-use tauri::State;
+use tauri::{AppHandle, LogicalSize, Manager, Size, State};
 use tokio::sync::watch;
 
 use crate::autostart;
@@ -102,6 +102,29 @@ pub fn set_autostart_enabled(enabled: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn get_window_size() -> String {
+    settings::window_size().to_string()
+}
+
+#[tauri::command]
+pub fn set_window_size(app: AppHandle, size: String) -> Result<String, String> {
+    let size = settings::normalize_window_size(&size);
+    settings::set_window_size(size).map_err(io_err)?;
+    apply_window_size(&app, size)?;
+    Ok(size.to_string())
+}
+
+pub fn apply_window_size(app: &AppHandle, size: &str) -> Result<(), String> {
+    let (width, height) = settings::window_logical_px(size);
+    let window = app.get_webview_window("main").ok_or("main window missing")?;
+    window
+        .set_size(Size::Logical(LogicalSize::new(width, height)))
+        .map_err(|e| e.to_string())?;
+    window.center().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_auto_accept_enabled() -> bool {
     settings::auto_accept_enabled()
 }
@@ -109,6 +132,58 @@ pub fn get_auto_accept_enabled() -> bool {
 #[tauri::command]
 pub fn set_auto_accept_enabled(enabled: bool) -> Result<(), String> {
     settings::set_auto_accept_enabled(enabled).map_err(io_err)
+}
+
+#[tauri::command]
+pub fn get_insta_lock() -> InstaLockSettings {
+    InstaLockSettings {
+        enabled: settings::insta_lock_enabled(),
+        first_champion_id: settings::insta_lock_first_champion_id(),
+        second_champion_id: settings::insta_lock_second_champion_id(),
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstaLockSettings {
+    pub enabled: bool,
+    pub first_champion_id: i64,
+    pub second_champion_id: i64,
+}
+
+#[tauri::command]
+pub fn set_insta_lock_enabled(enabled: bool) -> Result<(), String> {
+    settings::set_insta_lock_enabled(enabled).map_err(io_err)
+}
+
+#[tauri::command]
+pub fn set_insta_lock_champion(slot: String, champion_id: i64) -> Result<(), String> {
+    settings::set_insta_lock_champion_id(&slot, champion_id).map_err(io_err)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoBanSettings {
+    pub enabled: bool,
+    pub champion_id: i64,
+}
+
+#[tauri::command]
+pub fn get_auto_ban() -> AutoBanSettings {
+    AutoBanSettings {
+        enabled: settings::auto_ban_enabled(),
+        champion_id: settings::auto_ban_champion_id(),
+    }
+}
+
+#[tauri::command]
+pub fn set_auto_ban_enabled(enabled: bool) -> Result<(), String> {
+    settings::set_auto_ban_enabled(enabled).map_err(io_err)
+}
+
+#[tauri::command]
+pub fn set_auto_ban_champion_id(champion_id: i64) -> Result<(), String> {
+    settings::set_auto_ban_champion_id(champion_id).map_err(io_err)
 }
 
 #[tauri::command]

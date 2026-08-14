@@ -88,11 +88,11 @@ export function BadgesPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="max-w-lg text-sm leading-6 text-app-text-dim">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <p className="max-w-lg shrink-0 text-sm leading-6 text-app-text-dim">
         Choose up to three challenge tokens and a title for your profile, or remove them.
       </p>
-      <label className="flex max-w-sm flex-col gap-2">
+      <label className="flex max-w-sm shrink-0 flex-col gap-2">
         <span className="text-[11px] font-bold tracking-[0.18em] text-app-gold uppercase">Title</span>
         <Select value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy}>
           <option value="">None</option>
@@ -109,7 +109,7 @@ export function BadgesPanel() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      <div className="text-[11px] font-bold tracking-[0.18em] text-app-text-dim uppercase">
+      <div className="shrink-0 text-[11px] font-bold tracking-[0.18em] text-app-text-dim uppercase">
         {selected.length}/3 selected
       </div>
       {tokens.length === 0 ? (
@@ -118,7 +118,6 @@ export function BadgesPanel() {
         <VirtualList
           items={tokens}
           estimateSize={36}
-          className="h-[28rem]"
           itemKey={(item) => item.id}
           renderItem={(item) => {
             const active = selected.includes(item.id);
@@ -138,9 +137,9 @@ export function BadgesPanel() {
           }}
         />
       )}
-      {error && <p className="text-[12px] text-state-error">{error}</p>}
-      {status && <p className="text-[12px] text-app-text-dim">{status}</p>}
-      <div className="flex justify-center gap-6">
+      {error && <p className="shrink-0 text-[12px] text-state-error">{error}</p>}
+      {status && <p className="shrink-0 text-[12px] text-app-text-dim">{status}</p>}
+      <div className="flex shrink-0 justify-center gap-6">
         <Button muted disabled={busy} onClick={() => void clear()}>
           Remove badges
         </Button>

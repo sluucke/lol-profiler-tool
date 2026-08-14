@@ -16,7 +16,7 @@ export function Card({
   return (
     <div
       className={
-        `hextech-card flex flex-col p-4 ${fill ? "min-h-0 flex-1" : "h-auto shrink-0"} ${className}`
+        `hextech-card flex flex-col p-4 ${fill ? "min-h-0 flex-1 overflow-hidden" : "h-auto shrink-0"} ${className}`
       }
     >
       <div className="hextech-card-decal" aria-hidden="true" />

@@ -6,7 +6,20 @@ import { check, type Update } from "@tauri-apps/plugin-updater";
 import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
 import { Divider } from "../components/Divider";
+import { Select } from "../components/Input";
 import { playSfx, sfx } from "../sfx";
+
+const WINDOW_SIZES = [
+  { id: "small", label: "960 × 820" },
+  { id: "medium", label: "1080 × 920" },
+  { id: "large", label: "1280 × 1000" },
+] as const;
+
+type WindowSizeId = (typeof WINDOW_SIZES)[number]["id"];
+
+function asWindowSize(value: string): WindowSizeId {
+  return WINDOW_SIZES.some((item) => item.id === value) ? (value as WindowSizeId) : "medium";
+}
 
 type UpdateStatus = "idle" | "checking" | "none" | "available" | "installing" | "error";
 
@@ -16,6 +29,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   const [autostart, setAutostart] = useState(false);
   const [logs, setLogs] = useState(false);
   const [autoUpdate, setAutoUpdate] = useState(false);
+  const [windowSize, setWindowSize] = useState<WindowSizeId>("medium");
   const [leagueDir, setLeagueDir] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(pendingUpdate ? "available" : "idle");
   const [availableVersion, setAvailableVersion] = useState<string | null>(pendingUpdate?.version ?? null);
@@ -28,6 +42,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
     invoke<boolean>("get_auto_update_enabled").then(setAutoUpdate);
     invoke<boolean>("get_autostart_enabled").then(setAutostart);
     invoke<boolean>("get_logs_enabled").then(setLogs);
+    invoke<string>("get_window_size").then((size) => setWindowSize(asWindowSize(size)));
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
@@ -61,6 +76,17 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
       setLeagueDir(resolved);
     } catch {
       setLeagueDir(selected);
+    }
+  }
+
+  async function changeWindowSize(next: WindowSizeId) {
+    const previous = windowSize;
+    setWindowSize(next);
+    try {
+      const applied = await invoke<string>("set_window_size", { size: next });
+      setWindowSize(asWindowSize(applied));
+    } catch {
+      setWindowSize(previous);
     }
   }
 
@@ -153,6 +179,20 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             >
               {leagueDir ?? "Not found"}
             </span>
+          </div>
+          <Divider className="my-1" />
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[13px] font-semibold text-app-text-dim">Window size</span>
+            <Select
+              value={windowSize}
+              onChange={(event) => void changeWindowSize(asWindowSize(event.target.value))}
+            >
+              {WINDOW_SIZES.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </Select>
           </div>
           <Divider className="my-1" />
           <Checkbox checked={autostart} onChange={(next) => void toggleAutostart(next)}>

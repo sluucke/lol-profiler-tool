@@ -88,7 +88,7 @@ export function CreditsModal({ open, onClose }: { open: boolean; onClose: () => 
             <span className="text-[11px] font-bold tracking-[0.18em] text-app-gold uppercase">
               Special thanks
             </span>
-            <CreditLink large label="Biel Yi" href={BIEL_URL} />
+            <CreditLink large label="Bieelyi" href={BIEL_URL} />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-bold tracking-[0.18em] text-app-gold uppercase">
