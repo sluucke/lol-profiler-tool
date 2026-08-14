@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import appIcon from "../assets/app-icon.png";
 
 export function TitleBar() {
   const appWindow = getCurrentWindow();
@@ -6,14 +7,10 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-9 shrink-0 select-none items-center justify-between border-b border-app-gold-dark bg-linear-to-b from-app-bronze/40 to-app-surface"
+      className="flex h-9 shrink-0 select-none items-center justify-between bg-transparent"
     >
-      <div
-        data-tauri-drag-region
-        className="flex flex-1 items-center gap-2 px-3 font-display text-xs font-bold tracking-widest text-app-gold"
-        style={{ textShadow: "0 0 8px rgba(240, 198, 116, 0.4)" }}
-      >
-        LoL Profiler Tool
+      <div data-tauri-drag-region className="flex flex-1 items-center gap-2 px-3">
+        <img src={appIcon} alt="" className="h-5 w-5" draggable={false} />
       </div>
       <div className="flex">
         <button
